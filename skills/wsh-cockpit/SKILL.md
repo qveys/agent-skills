@@ -1,0 +1,296 @@
+---
+name: wsh-cockpit
+description: >-
+  Run commands on the user's behalf in a VISIBLE Wave Terminal block — local (on
+  their Mac) or on a Wave-connected remote host — so the user can watch exactly
+  what you run, see the output, and even take the keyboard. Use this whenever the
+  user wants to *see how you do something* rather than have it hidden in a tool
+  shell: "show me how you'd run this", "do it but let me watch", "open a terminal
+  and walk me through it", "run this on my machine / on the server and show me".
+  Also use it to execute on a host reachable only through Wave (a `wsh ssh`
+  connection, a remote block, `user@ip`, srvXXXX) when plain `ssh` fails with
+  "Permission denied (publickey,password)" because the credentials live in Wave /
+  1Password, not your local agent. Two modes: `rexec` (one-shot — run a command,
+  capture stdout/stderr + exit code, the block lingers ~60s so the user can read
+  it) and `live` (a shared tmux session on the Mac that you drive and the user
+  joins). Reach for this any time you're acting *for* the user at a terminal and
+  they should be able to see and trust what's happening — not just for servers.
+  For multi-step work in live mode, always announce phases/steps with airy visual
+  banners via `wsh-live.sh banner` / `wsh-step.sh` — never plain `echo` lines.
+  To deploy files to a remote host, use `scripts/wsh-push.sh` or `wsh file cp` —
+  never base64/python chunks through cockpit `send`.
+---
+
+# wsh-cockpit
+
+Do terminal work on the user's behalf **in the open**. Instead of running things
+in a hidden tool shell, you run them in a Wave Terminal block the user can see —
+local on their Mac or on a host Wave is connected to — so they can watch the
+exact commands, read the output, and step in if they want. Transparency is the
+whole point.
+
+Detailed docs (read the relevant one before diving into that area):
+- `docs/session-lifecycle.md` — `spawn`/`start`/`open`/`stop`, situating the
+  shell, reusing sessions, cleanup timing, `gc` sweep.
+- `docs/banners.md` — full banner rendering rules, palette, `step-run`.
+- `docs/framing-and-transfer.md` — `send` command framing internals, pushing
+  files to a remote, `remote-init`/`local-init`.
+- `docs/advanced.md` — audit trail, Zellij backend, `open` internals, `doctor`,
+  browser view (`web`).
+- `docs/gotchas.md` — the full pitfalls list with the "why" behind each.
+
+## Two modes
+
+- **`rexec` (one-shot)** — run a single command, capture stdout/stderr + exit
+  code, done. The visible block **lingers ~60s after the command finishes** so
+  the user can actually read what ran before it auto-closes — but that linger is
+  **detached**, so the script returns to you as soon as the command finishes (you
+  are NOT blocked for the linger). Works `local` (the Mac) or against a Wave
+  connection. → `scripts/wsh-rexec.sh`
+- **`live` (shared cockpit)** — a persistent **tmux session on the Mac** that you
+  drive (`send-keys` / `capture-pane`) and the user attaches to. You both share
+  one terminal: you type commands, they watch live, scroll, split panes, or take
+  the keyboard. Best for interactive, multi-step co-driving. → `scripts/wsh-live.sh`
+
+Default to `rexec`. Use `live` when the work is interactive or the user wants to
+sit in the same terminal with you.
+
+## Mode 1 — rexec (one-shot)
+
+```bash
+scripts/wsh-rexec.sh <local|connection> <command...>
+```
+
+**Local (the user's Mac):**
+Input: `scripts/wsh-rexec.sh local 'sw_vers; ls ~/Git'`
+Output: the command's stdout/stderr, then `---- exit code: N ----`
+
+**Remote (a Wave connection):**
+Input: `scripts/wsh-rexec.sh qveys@187.77.175.117 'docker ps; uname -a'`
+Output: same shape, run on the host.
+
+Find connection strings with `wsh conn status`. Quote the whole command as one
+argument — it runs under the target shell, so `;`, `&&`, pipes, and `$(...)`
+work. Slow command? `WSH_REXEC_TIMEOUT=180 scripts/wsh-rexec.sh ...`.
+
+The 60s linger runs detached (script returns immediately); mechanics of the
+transport (`START`/`END` markers, `runonce` resync) live in `wsh-rexec.sh`'s
+header — see `docs/gotchas.md` for the user-facing consequences.
+
+## Mode 2 — live (shared cockpit)
+
+A tmux session **on the Mac** that you and the user share. Your own shell runs on
+the Mac, so you talk to the local tmux server directly — no remote dispatcher, no
+`wsh file` queue, no SSH resync to freeze anything. tmux only needs to exist on
+the Mac (`brew install tmux`).
+
+```bash
+scripts/wsh-live.sh spawn [prefix] [--force] [--situate] [--pre <host>]  # open cockpit: reuse alive session by default
+scripts/wsh-live.sh start [session] [--reuse]  # create session (auto-unique if no name)
+scripts/wsh-live.sh open  [session] [--tab <name>]  # AUTO-OPEN a Wave block attached to it, optionally anchored on a named tab
+scripts/wsh-live.sh send  '<command>' [session]  # type a command + Enter
+scripts/wsh-live.sh keys  '<tmux-keys>' [session] # raw keys: C-c, Up, q, Enter...
+scripts/wsh-live.sh read  [session] [lines]    # free-form pane snapshot (default 30 lines) — unframed panes only
+scripts/wsh-live.sh output [session] [seq] [--full]  # print exactly send #seq's framed segment — no lines to guess
+scripts/wsh-live.sh stop  [session]            # kill the session (or release it, if it carries a keep marker)
+scripts/wsh-live.sh release <session>          # hand a session back: ADOPTED -> retrograded/re-adoptable; created/legacy -> claim dropped (re-scannable). No last-session default, argument mandatory
+scripts/wsh-live.sh current                    # print last spawned session for this agent
+scripts/wsh-live.sh doctor                     # read-only diagnostic of the whole chain, rc 0/1
+scripts/wsh-live.sh gc [--dry-run] [--idle=SECONDS] [--only-session=NAME]  # sweep orphaned idle sessions
+scripts/wsh-live.sh web {start|stop|status} [session]  # browser view via ttyd, read-only by default
+scripts/wsh-live.sh status [prefix]            # is last session alive? matching sessions?
+scripts/wsh-live.sh banner {header|phase|step|done} ... [session]  # airy step banners (required)
+scripts/wsh-live.sh step-run <id> '<label>' '<command>' [session] [timeout_sec]  # banner step + send + wait-done in ONE call
+scripts/wsh-live.sh remote-init [session] [host]  # after an ssh hop: push helpers to [host] (or sticky inline-only without it)
+scripts/wsh-live.sh remote-init --pre <host> [session]  # RECOMMENDED when <host> is known: push helpers BEFORE the hop
+scripts/wsh-live.sh local-init  [session]         # revert remote-init — back to local helper-file framing
+scripts/wsh-live.sh wait-done [session] [timeout_sec] [--print]    # wait for send exit footer; --print = + bounded output in one call
+scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / pane-side fn defs
+```
+
+### Annonces d'étapes aérées — **obligatoire** pour tout plan multi-étapes
+
+Quand tu exécutes un plan dans le cockpit (setup, déploiement, migration, audit…),
+**tu dois annoncer chaque phase et chaque étape avec des bannières visuelles aérées**
+via `banner` (jamais `echo`/markdown/commandes nues). Détails complets, palette,
+et le raccourci `step-run` : voir `docs/banners.md`.
+
+```bash
+COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
+$COCKPIT banner header "Théo Marceau — OpenClaw" "cockpit-theo-plan-225108"
+$COCKPIT banner phase  1 6 "Fondations & isolation"
+$COCKPIT banner step   1.1 "openclaw doctor"
+$COCKPIT send 'openclaw doctor 2>&1'
+$COCKPIT banner done   "Phase 1 terminée"
+```
+
+### Opening a cockpit — never hijack another agent's session
+
+**Use `spawn` to open or continue a cockpit** — never bare `start cockpit` (name
+commonly reused by other agents). `spawn` reuses an alive session by default;
+`spawn --force` only when you intentionally need a second window. `spawn
+--situate` also runs the mandatory hostname/pwd/whoami probe in one call — see
+"Situer le shell" below. Full lifecycle (`start --reuse`, `open` self-healing,
+`stop` auto-closing the Wave block, cleanup timing, `gc` sweep) : voir `docs/session-lifecycle.md`.
+
+**Hôte distant déjà connu ? Pousse les helpers AVANT le hop.** `spawn --pre
+<host>` (ou `remote-init --pre <host>` sur une session déjà spawnée) pré-stage
+les helpers sur `<host>` avant même que le pane fasse son `ssh` — le premier
+`send` après le hop est déjà en forme courte. C'est la voie **recommandée**
+quand tu connais l'hôte à l'avance.
+
+**Situer le shell juste après `spawn` — obligatoire, sinon.** Une session
+réutilisée peut être restée sur un serveur distant (ssh persistant, `cd`
+projet). Avant toute autre commande, sache sur quelle machine/répertoire/identité
+tu parles :
+
+```bash
+COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
+$COCKPIT spawn theo-plan --situate
+# → SESSION=cockpit-... puis directement la sortie du pane :
+#   srv1453980 / /docker/paperclip / root  (ou le Mac)
+```
+
+Si le résultat montre un hôte différent de l'attendu, `--situate` appelle déjà
+`remote-init` pour toi en best-effort (repli inline + warning si l'hôte
+détecté n'est pas joignable — jamais de hard-fail). Pour re-situer plus tard
+dans le workflow, ou forcer un hôte précis, appelle `$COCKPIT remote-init
+"$SESS" [host]` toi-même avant tout autre `send`/`banner` — voir
+`docs/framing-and-transfer.md` ("Remote shell / lost helpers").
+
+Set `WSH_COCKPIT_PREFIX` or `WSH_COCKPIT_AGENT` so parallel agents keep separate
+last-session state under `~/.cache/wsh-cockpit/`.
+
+`send` types a command + Enter, framed by default with header/footer banners
+(see `docs/framing-and-transfer.md`). `keys` sends raw control sequences
+(`C-c`, `Up`, `q`) for interactive programs — never framed.
+
+### Cockpit pré-ouvert par l'utilisateur — wrapper `claude-cockpit` et adoption
+
+L'utilisateur peut pré-ouvrir un ou plusieurs cockpits **avant même de te lancer**,
+via le wrapper `claude-cockpit` (`scripts/claude-cockpit.sh`, symlinké en
+`claude-cockpit` sur le `$PATH`) : `claude-cockpit theo-plan --keep --and deploy --
+<args claude>` crée un cockpit par groupe `--and`, pose `WSH_COCKPIT_ADOPT=<sessions>`
+(liste ordonnée) dans ton environnement, puis te lance. Ces sessions ne viennent pas
+d'un `spawn` que tu as toi-même émis — tu n'en es propriétaire qu'après une
+**adoption réussie**.
+
+- **Sonde systématique.** `spawn` (sans `--force`) tente d'abord ta propre session
+  enregistrée (registre), puis chaque session de `WSH_COCKPIT_ADOPT` — jamais en
+  silence : une sonde `hostname; pwd; whoami` tourne avant toute finalisation, son
+  résultat s'affiche, et un échec de sonde annule l'adoption (le claim est restauré,
+  jamais conservé sans preuve).
+- **Adoption ciblée.** Si l'utilisateur a nommé ses cockpits (préfixes des groupes
+  `--and`), reprends ces préfixes dans tes `spawn` — un préfixe explicite qui ne
+  correspond à **aucune** session adoptable **crée un cockpit neuf** (jamais
+  d'adoption forcée sur un préfixe non matché) ; seul un `spawn` **sans préfixe**
+  adopte en nominal (première session disponible de la liste).
+- **Propriété — `--keep` est sticky.** Une session pré-ouverte avec `--keep` reste
+  propriété de la session elle-même, pas de ton claim. Tu en as l'usage plein
+  (`send`/`read`/`banner`…) mais **jamais le droit de la détruire** : en fin de
+  tâche, `release` — jamais `stop` — pour qu'elle survive à la prochaine adoption
+  (le wrapper la relâchera de toute façon à ta sortie si tu as oublié). Une session
+  adoptée **sans** `--keep` peut être `stop`ée normalement en fin de tâche.
+- **`gc` et une keep abandonnée.** Une session `keep` détachée (aucun client Wave)
+  **et** idle depuis plus de 24 h retombe dans le balayage `gc` normal — `--keep`
+  protège des sweeps courts, pas d'un abandon prolongé.
+
+**Consignes sous-agents — clé distincte, nettoyage en fin de tâche.** Tout
+sous-agent qui `spawn`e son propre cockpit **doit** exporter un `WSH_COCKPIT_AGENT`
+qui lui est propre (jamais l'espace réservé `user-preopen-*`/`released` — `spawn`
+le refuse d'ailleurs explicitement). Règle simple en fin de tâche : **`stop` ce que
+tu as créé, `release` ce que tu as adopté** — jamais l'inverse.
+
+**To read a `send` result, prefer `wait-done --print` (or `output` after a
+plain `wait-done`) over `read N`.** The framing markers already delimit each
+`send` exactly (`┌─[#N]` … `└─[#N] exit <code>`), so `output` prints precisely
+that segment — no line count to guess, capped at `WSH_READ_MAX` (default 120,
+head+tail with an omitted-count note past that; `--full` disables the cap).
+`read [session] [lines]` stays for free-form scrollback inspection where there
+are no markers to bound on: an interactive program's screen, a TUI/REPL, or a
+`WSH_LIVE_SEP=0` pane.
+
+### Travailler sur un hôte distant — une session SSH persistante, pas de rafale de one-shots
+
+**Règle impérative.** Pour travailler sur un hôte distant : ouvre **une seule**
+session SSH interactive (auth FIDO2 une fois), reste dedans pour tout le
+travail, puis quitte. Pour un hop **OpenSSH**, active le multiplexage
+`ControlMaster` : la session interactive du pane devient alors la connexion
+maîtresse, réutilisable hors pane sans ré-auth (voir « Transférer des fichiers »
+plus bas) :
+
+```bash
+$COCKPIT send "ssh -o ControlMaster=auto -o ControlPath=~/.cache/wsh-cockpit/cm-$SESS -o ControlPersist=10m <host>" "$SESS"
+# ou, si <host> n'est joignable qu'en tailscale ssh (PAS d'OpenSSH ControlMaster) :
+$COCKPIT send 'tailscale ssh <host>' "$SESS"
+$COCKPIT remote-init "$SESS" <host>       # (ou --pre <host> AVANT le hop — voir plus haut)
+# ... toutes les actions de travail se font DANS cette session (send/banner) ...
+$COCKPIT send 'exit' "$SESS"              # retour au Mac en fin de travail
+```
+
+Le one-shot `ssh <host> '<cmd> 2>&1'` (une commande inline qui rend la main
+tout de suite, sans ouvrir de shell interactif) reste légitime **uniquement
+pour un diagnostic ponctuel** (1-2 commandes max) — jamais comme mode de
+travail habituel. `send` compte les one-shots SSH consécutifs et, à partir du
+2e, émet un **avertissement sur stderr** recommandant la session persistante —
+jamais bloquant (des rafales légitimes existent, ex. sondes multi-hôtes), et
+jamais visible dans le pane. Le compteur repart à zéro dès qu'un `send` ne
+matche pas ce motif, ou qu'un hop SSH **interactif** (sans commande inline) est
+envoyé.
+
+Ceci ne contredit pas le gotcha "toujours `2>&1`, jamais sauter `wait-done`"
+(voir plus bas) : dans la session persistante, le footer `└─[#N] exit <code>`
+reste garanti à chaque `send`, exactement comme en local — c'est précisément
+ce que `remote-init`/`--pre <host>` maintiennent en poussant les helpers sur
+l'hôte. Les deux règles sont compatibles : une session, `2>&1` systématique,
+footer fiable à chaque commande.
+
+### Transférer des fichiers — **jamais base64/cat dans `send`**
+
+Séparer transfert et exécution. **Quand le pane est en session SSH**, la voie
+officielle est `push`/`pull` (l'hôte est déduit de `remote-init`/`--pre` —
+jamais à redonner à la main) :
+
+```bash
+$COCKPIT push "$SESS" ./local-file.md /remote/absolute/path.md   # local -> remote
+$COCKPIT pull "$SESS" /remote/absolute/path.log ./local-copy.log # remote -> local
+```
+
+Ordre de transport (choisi automatiquement, annoncé sur stderr) : `wsh file
+cp` → le socket `ControlMaster` de la session (zéro ré-auth — voir ci-dessus)
+→ `tailscale ssh` → `scp` nu en dernier recours. Ces transports tournent hors
+pane depuis le shell agent : ils ne comptent **jamais** pour l'avertissement
+one-shot SSH (qui ne surveille que `send`) — le hors-pane piggyback la
+connexion du pane, il ne la contourne pas.
+
+Hors session SSH (local → local, ou hôte connu sans passer par une session
+cockpit), `scripts/wsh-push.sh` (ou `wsh file cp`) reste utilisable
+directement. Détails, fallback chain, méthodes : voir
+`docs/framing-and-transfer.md`.
+
+## Cleaning up — but not too fast
+
+Every visible block/pane is clutter if left behind. **Wait at least 60s** before
+treating an apparently-idle block/session as an orphan — it may still be mid-run.
+Only delete blocks/sessions **you created or adopted without `--keep`**. A
+session adopted **with** `--keep` set stays owned but not destroyable — always
+`release` it (never `stop`), so it survives for the next adoption instead of
+tearing down the user's own cockpit; `stop` on a keep session already
+substitutes `release` automatically, but don't rely on that for a session you
+only adopted. `live` mode: `stop` (and `gc`) close the Wave block automatically
+along with the tmux session — nothing manual needed. Automated sweep for
+forgotten `live` sessions: `scripts/wsh-live.sh gc`. Full detail: see
+`docs/session-lifecycle.md`.
+
+## Gotchas — top of mind
+
+The full list with rationale lives in `docs/gotchas.md`; the two that bite most:
+
+- **Always end `send`/`rexec` commands with `2>&1`** — non négociable, sinon le
+  footer `exit <code>` peut sembler manquant ou incomplet.
+- **Never `send` the next command until the previous one's footer shows `exit`.**
+  Use `wait-done`, never agent-side `sleep` or output-grepping.
+
+See `docs/gotchas.md` for the rest (remote-first-statement mangling, `rexec`
+non-interactivity, Wave exit-code unreliability, base64-in-`send`, gateway
+restart race, etc).
