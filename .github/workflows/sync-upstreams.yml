@@ -1,0 +1,52 @@
+name: Sync Upstream Skills
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Run daily at 2am UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Skills Sync
+        run: npm run skills:sync -- --all
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'chore(sync): update upstream skills'
+          title: '🔄 chore(sync): update upstream skills'
+          body: |
+            Automated synchronization of upstream Agent Skills.
+
+            Please review the updated `vendor/` directories and `sources.lock.yaml` file.
+          branch: chore/sync-upstream-skills
+          delete-branch: true
+          labels: automated-sync
