@@ -1,0 +1,37 @@
+{
+  "name": "agent-skills",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "skills:check": "tsx src/cli/index.ts check",
+    "skills:sync": "tsx src/cli/index.ts sync",
+    "skills:validate": "tsx src/cli/index.ts validate",
+    "lint": "biome check src tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qveys/agent-skills.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/qveys/agent-skills/issues"
+  },
+  "homepage": "https://github.com/qveys/agent-skills#readme",
+  "dependencies": {
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
