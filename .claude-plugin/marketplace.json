@@ -1,0 +1,47 @@
+{
+  "name": "agent-skills",
+  "owner": {
+    "name": "Qveys"
+  },
+  "metadata": {
+    "description": "Central repository for proprietary and vendored agent skills"
+  },
+  "plugins": [
+    {
+      "name": "pr-comments-resolver",
+      "source": "./skills/pr-comments-resolver",
+      "description": "Automates the full GitHub PR review response cycle",
+      "strict": false
+    },
+    {
+      "name": "wsh-cockpit",
+      "source": "./skills/wsh-cockpit",
+      "description": "Workspace shell cockpit for managing tasks",
+      "strict": false
+    },
+    {
+      "name": "paperclip-vps",
+      "source": "./skills/paperclip-vps",
+      "description": "Debug/administer the Paperclip AI-company server on vps-openclaw",
+      "strict": false
+    },
+    {
+      "name": "chantier-relais",
+      "source": "./skills/chantier-relais",
+      "description": "Découper un plan ou un gros projet en étapes exécutables par petites sessions",
+      "strict": false
+    },
+    {
+      "name": "conflict-resolve",
+      "source": "./skills/conflict-resolve",
+      "description": "Git conflict resolution helper",
+      "strict": false
+    },
+    {
+      "name": "ou-en-suis-je",
+      "source": "./skills/ou-en-suis-je",
+      "description": "Context check and status recovery",
+      "strict": false
+    }
+  ]
+}
