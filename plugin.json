@@ -1,0 +1,13 @@
+{
+  "name": "agent-skills",
+  "version": "1.0.0",
+  "description": "Central repository for proprietary and vendored agent skills",
+  "author": {
+    "name": "Qveys"
+  },
+  "keywords": [
+    "skills",
+    "agents",
+    "automation"
+  ]
+}
