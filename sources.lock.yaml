@@ -1,0 +1,16 @@
+version: 1
+sources:
+  security-review:
+    repo: github/awesome-copilot
+    ref: main
+    path: skills/security-review
+    destination: vendor/github-awesome-copilot/security-review
+    commit: 55b952d2f9bd5b092d2f4b87fdbcf205a1a5ccc5
+    syncedAt: 2026-08-13T14:29:12.286Z
+  acquire-codebase-knowledge:
+    repo: github/awesome-copilot
+    ref: main
+    path: skills/acquire-codebase-knowledge
+    destination: vendor/github-awesome-copilot/acquire-codebase-knowledge
+    commit: 55b952d2f9bd5b092d2f4b87fdbcf205a1a5ccc5
+    syncedAt: 2026-08-13T14:29:22.523Z

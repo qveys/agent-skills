@@ -1,0 +1,15 @@
+version: 1
+sources:
+  - id: security-review
+    repo: github/awesome-copilot
+    ref: main
+    path: skills/security-review
+    destination: vendor/github-awesome-copilot/security-review
+    enabled: true
+
+  - id: acquire-codebase-knowledge
+    repo: github/awesome-copilot
+    ref: main
+    path: skills/acquire-codebase-knowledge
+    destination: vendor/github-awesome-copilot/acquire-codebase-knowledge
+    enabled: true
