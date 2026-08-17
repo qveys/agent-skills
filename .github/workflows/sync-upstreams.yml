@@ -12,15 +12,20 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # Repo policy only allows local/same-owner actions, all SHA-pinned.
+      # No third-party action satisfies that for checkout/setup-node/PR creation,
+      # so this job uses the git/node/gh CLI already on the runner image instead.
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
+        run: |
+          git init -q
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git config --local "http.https://github.com/.extraheader" \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --depth 1 origin "$GITHUB_REF"
+          git checkout FETCH_HEAD
 
       - name: Install dependencies
         run: npm ci
@@ -32,21 +37,29 @@ jobs:
         id: check_changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then
-            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "changes=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "changes=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.changes == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: 'chore(sync): update upstream skills'
-          title: '🔄 chore(sync): update upstream skills'
-          body: |
-            Automated synchronization of upstream Agent Skills.
+        run: |
+          branch="chore/sync-upstream-skills"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -A
+          git commit -m "chore(sync): update upstream skills"
+          git push -f origin "$branch"
 
-            Please review the updated `vendor/` directories and `sources.lock.yaml` file.
-          branch: chore/sync-upstream-skills
-          delete-branch: true
-          labels: automated-sync
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            echo "PR already exists for $branch; branch updated."
+          else
+            gh pr create \
+              --title "🔄 chore(sync): update upstream skills" \
+              --body $'Automated synchronization of upstream Agent Skills.\n\nPlease review the updated `vendor/` directories and `sources.lock.yaml` file.' \
+              --base "$GITHUB_REF_NAME" \
+              --head "$branch" \
+              --label automated-sync
+          fi
