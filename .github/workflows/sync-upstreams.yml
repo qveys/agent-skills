@@ -11,21 +11,26 @@ permissions:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       # Repo policy only allows local/same-owner actions, all SHA-pinned.
       # No third-party action satisfies that for checkout/setup-node/PR creation,
       # so this job uses the git/node/gh CLI already on the runner image instead.
+      # These runners keep their workspace between runs (unlike a hosted VM),
+      # so this step is written to be safe to re-run: reset any remote/config
+      # left by a previous job and wipe untracked/ignored leftovers.
       - name: Checkout code
         run: |
           git init -q
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git" 2>/dev/null || \
+            git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git config --local "http.https://github.com/.extraheader" \
             "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           git fetch --depth 1 origin "$GITHUB_REF"
-          git checkout FETCH_HEAD
+          git checkout -f FETCH_HEAD
+          git clean -ffdx
 
       - name: Install dependencies
         run: npm ci
