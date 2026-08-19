@@ -16,9 +16,11 @@ jobs:
       # so this step is written to be safe to re-run: reset any remote/config
       # left by a previous job and wipe untracked/ignored leftovers.
       #
-      # GH_TOKEN is scoped to this step only, and passed via `git -c`
-      # per-command rather than `git config --local` so it's never
-      # persisted to .git/config on this shared, persistent runner.
+      # GH_TOKEN is scoped to this step only. The auth header is set via
+      # `git config --local` (passing it through `-c` on the command line
+      # makes git fall back to an interactive credential prompt on 401,
+      # which fails non-interactively on the runner) and unset again right
+      # after the fetch, so it's never left behind in .git/config.
       - name: Checkout code
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -26,8 +28,10 @@ jobs:
           git init -q
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git" 2>/dev/null || \
             git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
-            fetch --depth 1 origin "$GITHUB_REF"
+          git config --local "http.https://github.com/.extraheader" \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --depth 1 origin "$GITHUB_REF"
+          git config --local --unset "http.https://github.com/.extraheader"
           git checkout -f FETCH_HEAD
           git clean -ffdx
 
