@@ -98,7 +98,10 @@ mux_kill() {
   fi
 }
 mux_attach_cmd() {  # the command a human types to join the session
-  if [ "$MUX" = tmux ]; then printf 'tmux attach -t %s\n' "$1"
+  # tmux attach warns/refuses ("sessions should be nested with care") when the
+  # human's own terminal is already inside a tmux session — give them the
+  # non-nesting alternative up front instead of letting them hit that wall.
+  if [ "$MUX" = tmux ]; then printf 'tmux attach -t %s\n  (already inside tmux? use: tmux switch-client -t %s)\n' "$1" "$1"
   else printf 'zellij attach %s\n' "$1"; fi
 }
 mux_block_attach_cmd() {  # $1 session, $2 ABSOLUTE mux binary — what a Wave block runs
