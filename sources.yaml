@@ -69,3 +69,10 @@ sources:
     path: skills/ai-team-orchestration
     destination: vendor/github-awesome-copilot/ai-team-orchestration
     enabled: true
+
+  - id: one-skill-to-rule-them-all
+    repo: rebelytics/one-skill-to-rule-them-all
+    ref: main
+    path: "."
+    destination: vendor/rebelytics-one-skill-to-rule-them-all/one-skill-to-rule-them-all
+    enabled: true
