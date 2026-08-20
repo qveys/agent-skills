@@ -7,16 +7,60 @@ on:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
+      # Repo policy only allows local/same-owner actions, all SHA-pinned.
+      # No third-party action satisfies that for checkout/setup-node,
+      # so this job uses the git/node CLI already on the runner image instead.
+      # These runners keep their workspace between runs (unlike a hosted VM),
+      # so this step is written to be safe to re-run: reset any remote/config
+      # left by a previous job and wipe untracked/ignored leftovers.
+      #
+      # GH_TOKEN is scoped to this step only. The auth header is set via
+      # `git config --local` (passing it through `-c` on the command line
+      # makes git fall back to an interactive credential prompt on 401,
+      # which fails non-interactively on the runner) and unset again right
+      # after the fetch, so it's never left behind in .git/config.
       - name: Checkout code
-        uses: actions/checkout@v4
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -q
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git" 2>/dev/null || \
+            git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git config --local "http.https://github.com/.extraheader" \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --depth 1 origin "$GITHUB_REF"
+          git config --local --unset "http.https://github.com/.extraheader"
+          git checkout -f FETCH_HEAD
+          git clean -ffdx
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
+      # Self-hosted runners are shared across repos and not provisioned by
+      # this workflow, so Node may be absent or too old (e.g. system Node 18
+      # vs the ^20.19/22.12+ this project's toolchain needs). Download a
+      # local copy once per runner and prepend it to PATH instead of relying
+      # on (or mutating) whatever Node the runner happens to have installed.
+      - name: Ensure Node.js 22+
+        run: |
+          need_major=22
+          node_version=22.23.2
+          cur_major=$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)
+          if [ -n "$cur_major" ] && [ "$cur_major" -ge "$need_major" ]; then
+            echo "System Node v$cur_major already satisfies >= $need_major"
+            exit 0
+          fi
+          case "$(uname -m)" in
+            x86_64) node_arch=x64 ;;
+            aarch64) node_arch=arm64 ;;
+            *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          node_dir="${RUNNER_TEMP:-/tmp}/node-v${node_version}-linux-${node_arch}"
+          if [ ! -x "$node_dir/bin/node" ]; then
+            curl -fsSL "https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-${node_arch}.tar.xz" \
+              -o "${RUNNER_TEMP:-/tmp}/node.tar.xz"
+            tar -xf "${RUNNER_TEMP:-/tmp}/node.tar.xz" -C "${RUNNER_TEMP:-/tmp}"
+          fi
+          echo "$node_dir/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         run: npm ci

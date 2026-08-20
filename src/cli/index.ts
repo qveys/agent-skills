@@ -112,7 +112,10 @@ async function handleValidate() {
 
   const lockfile = await loadLockfile(LOCKFILE_PATH);
   // Validate consistency
-  for (const [id, lockEntry] of Object.entries(lockfile.sources) as [string, any][]) {
+  for (const [id, lockEntry] of Object.entries(lockfile.sources) as [
+    string,
+    any,
+  ][]) {
     const manifestSource = manifest.sources.find((s) => s.id === id);
     if (!manifestSource) {
       console.warn(
