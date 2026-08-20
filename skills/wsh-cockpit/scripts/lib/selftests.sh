@@ -316,7 +316,7 @@ cmd_selftest_live() {
     if [ "$rc_a" -eq 0 ] \
        && printf '%s' "$flat_a" | grep -Fq '{ ssh fake-e2e-host; }' \
        && printf '%s' "$out_a" | grep -Fq 'FAKE_SSH_HOP_TO:fake-e2e-host' \
-       && ! printf '%s' "$flat_a" | grep -Fq "__wsh '[0-9]*' 'ssh fake-e2e-host'" \
+       && ! printf '%s' "$flat_a" | grep -Eq "__wsh '[0-9]+' 'ssh fake-e2e-host'" \
        && [ "$rc_b" -eq 0 ] \
        && printf '%s' "$flat_b" | grep -Fq ". '${default_sep_helper}' && __wsh '" \
        && printf '%s' "$flat_b" | grep -Fq "'echo POST_HOP_MARK'" \

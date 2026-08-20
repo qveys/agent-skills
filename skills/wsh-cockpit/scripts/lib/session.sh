@@ -901,9 +901,16 @@ ssh_hop_targets_host() {
   [ -n "$host" ] || return 1
   [[ "$cmd" =~ ^(tailscale[[:space:]]+)?ssh[[:space:]] ]] || return 1
   oneshot_ssh_is_inline "$cmd" && return 1
+  set -f
   for word in $cmd; do
-    [ "$word" = "$host" ] && return 0
+    case "$word" in
+      "$host" | *"@$host")
+        set +f
+        return 0
+        ;;
+    esac
   done
+  set +f
   return 1
 }
 
