@@ -5,50 +5,50 @@ sources:
     ref: main
     path: skills/security-review
     destination: vendor/github-awesome-copilot/security-review
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:40:09.845Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:32.283Z
   acquire-codebase-knowledge:
     repo: github/awesome-copilot
     ref: main
     path: skills/acquire-codebase-knowledge
     destination: vendor/github-awesome-copilot/acquire-codebase-knowledge
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:40:39.119Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:37.628Z
   agent-owasp-compliance:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-owasp-compliance
     destination: vendor/github-awesome-copilot/agent-owasp-compliance
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:41:14.781Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:41.450Z
   architecture-blueprint-generator:
     repo: github/awesome-copilot
     ref: main
     path: skills/architecture-blueprint-generator
     destination: vendor/github-awesome-copilot/architecture-blueprint-generator
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:41:44.112Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:45.375Z
   agentic-eval:
     repo: github/awesome-copilot
     ref: main
     path: skills/agentic-eval
     destination: vendor/github-awesome-copilot/agentic-eval
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:42:13.584Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:49.390Z
   agent-supply-chain:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-supply-chain
     destination: vendor/github-awesome-copilot/agent-supply-chain
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:42:43.080Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:53.551Z
   agent-skill-stack:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-skill-stack
     destination: vendor/github-awesome-copilot/agent-skill-stack
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:43:13.947Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:39:57.380Z
   ai-ready:
     repo: johnpapa/ai-ready
     ref: main
@@ -61,12 +61,12 @@ sources:
     ref: main
     path: skills/agent-governance
     destination: vendor/github-awesome-copilot/agent-governance
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:44:13.357Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:40:03.342Z
   ai-team-orchestration:
     repo: github/awesome-copilot
     ref: main
     path: skills/ai-team-orchestration
     destination: vendor/github-awesome-copilot/ai-team-orchestration
-    commit: a80885b76044550770f60f360f8a0e5ae3524a31
-    syncedAt: 2026-08-16T22:44:43.200Z
+    commit: 318066d2213b510e89b500ed0d53506c54093ddc
+    syncedAt: 2026-08-19T19:40:07.845Z
