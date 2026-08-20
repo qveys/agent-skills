@@ -511,6 +511,31 @@ adopt_pane_ready() {  # $1 sess -> rc 0 pane's foreground process AND last line 
   ! adopt_last_line_busy "$(mux_pane_last_line "$1")"
 }
 
+# Bounded poll around adopt_pane_ready (condition-based waiting, not an
+# arbitrary sleep): a pane that was JUST created (--preopen bootstrap racing
+# straight into try_adopt_session, as spawn's own wrapper does) can still be
+# mid-render of its shell prompt (RPROMPT git/venv segments etc.) for the
+# first few hundred ms — a single-shot sample can catch it there and read a
+# not-yet-settled last line as unrecognized/busy, refusing a pane that is
+# genuinely idle a moment later (measured: selftest-adopt cases 9/25/26/28
+# flaking on exactly this). A genuinely busy pane (real typed text) simply
+# keeps failing every poll and is refused after the same bound — same
+# outcome as before, just deferred by at most this timeout.
+# mux_has is re-checked every iteration (not just once by the caller):
+# mux_pane_command/mux_pane_last_line return empty on a dead session, which
+# adopt_pane_ready misreads as "idle/adoptable" — without this check, a
+# candidate that dies mid-poll would be waved through into a 60s probe that's
+# doomed to fail, instead of being rejected immediately.
+adopt_wait_pane_ready() {  # $1 sess -> rc 0 became ready, 1 timed out or session died
+  local sess="$1" waited=0
+  while mux_has "$sess" && ! adopt_pane_ready "$sess"; do
+    [ "$waited" -ge 20 ] && return 1
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  mux_has "$sess"
+}
+
 # Systematic, non-optional probe (spec v12 §2): a released/hand-opened keep
 # may have been ssh-hopped without ever calling remote-init, so its sticky
 # remote-mode tmux option can't be trusted — WSH_LIVE_SEP_REINIT=1 forces
@@ -583,7 +608,7 @@ try_adopt_session() {  # $1 requested prefix (raw) $2 normalized -> rc 0 adopted
     claim_consume "$slug" "$pid" || continue
     rc=0; claim_verify_won "$slug" "$pid" || rc=$?
     if [ "$rc" -ne 0 ]; then claim_rollback "$slug" "$pid"; continue; fi
-    if ! adopt_pane_ready "$cand"; then claim_rollback "$slug" "$pid"; continue; fi
+    if ! adopt_wait_pane_ready "$cand"; then claim_rollback "$slug" "$pid"; continue; fi
     adopt_run_probe "$cand"
     if [ "$ADOPT_PROBE_RC" -ne 0 ]; then claim_rollback "$slug" "$pid"; continue; fi
     if ! claim_finalize "$slug" "$pid" "$mykey"; then claim_rollback "$slug" "$pid"; continue; fi
