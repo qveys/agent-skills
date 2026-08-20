@@ -521,14 +521,19 @@ adopt_pane_ready() {  # $1 sess -> rc 0 pane's foreground process AND last line 
 # flaking on exactly this). A genuinely busy pane (real typed text) simply
 # keeps failing every poll and is refused after the same bound — same
 # outcome as before, just deferred by at most this timeout.
-adopt_wait_pane_ready() {  # $1 sess -> rc 0 became ready, 1 timed out still not ready
+# mux_has is re-checked every iteration (not just once by the caller):
+# mux_pane_command/mux_pane_last_line return empty on a dead session, which
+# adopt_pane_ready misreads as "idle/adoptable" — without this check, a
+# candidate that dies mid-poll would be waved through into a 60s probe that's
+# doomed to fail, instead of being rejected immediately.
+adopt_wait_pane_ready() {  # $1 sess -> rc 0 became ready, 1 timed out or session died
   local sess="$1" waited=0
-  while ! adopt_pane_ready "$sess"; do
+  while mux_has "$sess" && ! adopt_pane_ready "$sess"; do
     [ "$waited" -ge 20 ] && return 1
     sleep 0.1
     waited=$((waited + 1))
   done
-  return 0
+  mux_has "$sess"
 }
 
 # Systematic, non-optional probe (spec v12 §2): a released/hand-opened keep
