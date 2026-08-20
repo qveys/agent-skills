@@ -308,14 +308,22 @@ sub="${1:-}"; shift || true
 # the mismatch itself and issue a separate `remote-init` call.
 situate_session() {
   local sess="$1"
-  "$0" send 'printf "WSH_SITUATE_HOST=%s\n" "$(hostname)"; pwd; whoami 2>&1' "$sess"
+  # Force inline framing for the probe itself (never trust the session's
+  # sticky remote-mode flag here) — same rationale as adopt_run_probe
+  # (lib/session.sh): `spawn --pre <host>` flips remote mode ON right before
+  # this runs, but that only PRE-STAGES the remote helper files for the hop
+  # that's about to happen — the pane hasn't actually ssh'd there yet at this
+  # point, so a remote-path sourcing form would try to source a file that
+  # only exists on <host>, not on whatever the pane is currently running on.
+  # The probe is self-contained either way, so inline framing is always safe.
+  WSH_LIVE_SEP_REINIT=1 "$0" send 'printf "WSH_SITUATE_HOST=%s\n" "$(hostname)"; pwd; whoami 2>&1' "$sess"
   local rc=0
-  "$0" wait-done "$sess" 60 || rc=$?
+  WSH_LIVE_SEP_REINIT=1 "$0" wait-done "$sess" 60 || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "situate: wait-done exited $rc (timeout or non-zero probe) — showing pane anyway" >&2
   fi
   local out
-  out=$("$0" read "$sess" 20)
+  out=$(WSH_LIVE_SEP_REINIT=1 "$0" read "$sess" 20)
   printf '%s\n' "$out"
   local remote_host
   remote_host=$(printf '%s\n' "$out" | tr -d '\r' | grep -o '^WSH_SITUATE_HOST=.*' | tail -n1 | cut -d= -f2-)
@@ -336,13 +344,20 @@ situate_session() {
   fi
 }
 
-# Resolve $HOME on <host> directly from the agent's own shell — no pane
-# involved — via the same one-hop `tailscale ssh` channel wsh-push.sh's own
-# remote_size() uses. Needed for pre-push, which runs BEFORE the pane has
-# ssh-hopped to <host>, so there is no pane content to frame/read yet.
-remote_home_direct() {
-  command -v tailscale >/dev/null 2>&1 || return 1
-  tailscale ssh "$1" 'printf "%s" "$HOME"' 2>/dev/null
+# `tailscale ssh` has no connect/idle timeout of its own, so a stuck tailnet
+# path (DERP relay hiccup, host gone unreachable mid-call) would otherwise
+# hang the agent indefinitely. Mirrors wsh-push.sh's own `ts_ssh` (best-effort:
+# neither `timeout` nor `gtimeout` ships with stock macOS, so this runs
+# unwrapped as a last resort rather than failing).
+ts_ssh_direct() {
+  local timeout_s="${WSH_PUSH_SSH_TIMEOUT:-8}"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_s" tailscale ssh "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$timeout_s" tailscale ssh "$@"
+  else
+    tailscale ssh "$@"
+  fi
 }
 
 # Push local sep/step helper files to <host>:<remote_dir> and record their
@@ -381,34 +396,64 @@ push_and_register_helpers() {  # $1 sess $2 host $3 remote_dir -> 0 ok, 1 failed
 # Used by `spawn --pre <host>`: pre-stage the sep/step helper files on <host>
 # BEFORE the pane has ssh-hopped there (unlike `remote-init <sess> <host>`,
 # which requires the hop to already have happened so it can resolve $HOME
-# through the pane). $HOME/mkdir are resolved directly via tailscale ssh
-# instead — there is no pane content to visibly frame yet, so this is closer
-# in spirit to wsh-push.sh's own agent-side file transfer than to a `send`.
-# Once the pane actually lands on <host> later, send/banner are immediately
-# ready with short remote sourcing — no extra remote-init round-trip needed.
+# through the pane) — there is no pane content to visibly frame yet, so this
+# is closer in spirit to wsh-push.sh's own agent-side file transfer than to a
+# `send`. Resolving $HOME, mkdir-ing the remote dir, and pushing both helper
+# files all happen in ONE `tailscale ssh` round trip (tar streamed over
+# stdin), instead of the up-to-6 sequential relayed round trips this used to
+# take (resolve $HOME, mkdir, then wsh-push.sh's own push+size-verify for each
+# of the 2 files via push_and_register_helpers) — the whole point of "pre"
+# staging is to be ahead of the hop, so a slow pre-stage defeats its own
+# purpose. `tailscale ssh` doesn't reliably propagate the remote command's
+# exit code as its own (see wsh-push.sh's try_tailscale_push comment), so
+# success is verified by the presence of the marker line the remote `set -e`
+# chain only reaches once mkdir+tar-extract both actually succeeded — not by
+# trusting $rc. Once the pane actually lands on <host> later, send/banner are
+# immediately ready with short remote sourcing — no extra remote-init
+# round-trip needed.
 pre_push_helpers() {  # $1 sess $2 host -> 0 staged, 1 skipped/failed
-  local sess="$1" host="$2" rhome
+  local sess="$1" host="$2"
   # Record the host now: the caller already knows the pane is ABOUT to hop
   # there (that's the whole point of --pre), so push/pull can resolve it
   # afterwards regardless of whether the best-effort helper pre-stage below
   # succeeds.
   remote_host_set "$sess" "$host"
-  rhome=$(remote_home_direct "$host") || true
+  command -v tailscale >/dev/null 2>&1 || {
+    echo "warn: tailscale not found — skipping pre-push; remote-init after the hop still works" >&2
+    return 1
+  }
+  local local_sep local_step local_dir b_sep b_step out rc rhome
+  local_sep=$(sep_ensure_helpers)
+  local_step=$(step_ensure_helpers)
+  local_dir=$(dirname "$local_sep")  # step lives alongside it — see helper_ensure ($STATE_DIR/helpers)
+  b_sep=$(basename "$local_sep")
+  b_step=$(basename "$local_step")
+  set +e
+  out=$(tar -cf - -C "$local_dir" "$b_sep" "$b_step" 2>/dev/null | ts_ssh_direct "$host" '
+      set -e
+      rhome=$HOME
+      dir="$rhome/.cache/wsh-cockpit/helpers"
+      mkdir -p "$dir"
+      tar -xf - -C "$dir"
+      printf "WSH_PRE_HOME=%s\n" "$rhome"
+    ' 2>&1)
+  rc=$?
+  set -e
+  rhome=$(printf '%s\n' "$out" | grep -o '^WSH_PRE_HOME=.*' | tail -n1 | cut -d= -f2-)
   if [ -z "$rhome" ]; then
-    echo "warn: could not resolve \$HOME on '$host' directly (tailscale ssh unavailable/failed) — skipping pre-push; remote-init after the hop still works" >&2
+    echo "warn: could not pre-push helpers to '$host' (rc=$rc) — skipping pre-push; remote-init after the hop still works" >&2
     return 1
   fi
   local remote_dir="${rhome}/.cache/wsh-cockpit/helpers"
-  if ! tailscale ssh "$host" "mkdir -p '${remote_dir}'" >/dev/null 2>&1; then
-    echo "warn: could not create $remote_dir on '$host' — skipping pre-push" >&2
-    return 1
-  fi
-  if push_and_register_helpers "$sess" "$host" "$remote_dir"; then
-    remote_mode_set "$sess" 1 >/dev/null 2>&1 || true
-    echo "pre-push: helpers staged on '$host':$remote_dir for session '$sess' — remote mode ON, ready before the hop"
-    return 0
-  fi
-  return 1
+  remote_helper_path_set "$sess" sep "${remote_dir}/${b_sep}"
+  remote_helper_path_set "$sess" step "${remote_dir}/${b_step}"
+  # Deliberately NOT remote_mode_set here: the pane hasn't hopped yet, it's
+  # still local. Flipping remote_mode ON now would make the very next `send`
+  # (the hop command itself) source the remote helper path on a pane that's
+  # still on the Mac. `send`'s framing block detects the actual hop send
+  # (ssh_hop_targets_host) and flips remote_mode ON only once that send runs.
+  echo "pre-push: helpers staged on '$host':$remote_dir for session '$sess' — ready before the hop (remote mode flips ON once the hop send runs)"
+  return 0
 }
 
 # Shared engine for the `push`/`pull` subcommands: resolves the session's
@@ -1023,7 +1068,7 @@ remote-init)
   # BEFORE the pane has ssh-hopped there (recommended whenever the host is
   # known ahead of time: it removes the round trip through the pane entirely,
   # since $HOME is resolved directly over `tailscale ssh` — see
-  # pre_push_helpers/remote_home_direct). Same one-hop-only / best-effort
+  # pre_push_helpers). Same one-hop-only / best-effort
   # fallback-to-inline semantics as the post-hop form above.
   have_mux
   if [ "${1:-}" = "--pre" ]; then
@@ -1055,7 +1100,7 @@ remote-init)
     # wsh-push.sh's scp/tailscale-ssh fallbacks, where a literal '~' is NOT
     # guaranteed to expand. (`spawn --pre <host>` resolves $HOME differently —
     # directly via tailscale ssh — because it runs before any hop exists; see
-    # remote_home_direct.)
+    # pre_push_helpers.)
     set +e
     WSH_LIVE_SEP_REINIT=1 "$0" send 'printf "WSH_REMOTE_HOME=%s\n" "$HOME"' "$SESS" >/dev/null 2>&1
     "$0" wait-done "$SESS" 30 >/dev/null 2>&1
@@ -1212,6 +1257,14 @@ send)
     REMOTE_SEP_PATH=""
     if [ -n "${WSH_LIVE_SEP_REINIT+x}" ]; then
       USE_INLINE="$WSH_LIVE_SEP_REINIT"
+    elif ! remote_mode_get "$SESS" && [ -n "$(remote_helper_path_get "$SESS" sep)" ] \
+        && ssh_hop_targets_host "$CMD" "$(remote_host_get "$SESS")"; then
+      # Helpers pre-staged (`--pre`) but the pane hasn't hopped yet, and THIS
+      # send is the hop itself — must run on the still-local pane (inline).
+      # Flip remote_mode ON now so every send AFTER this one uses the remote
+      # path form already staged on the host.
+      USE_INLINE=1
+      remote_mode_set "$SESS" 1 >/dev/null 2>&1 || true
     elif remote_mode_get "$SESS"; then
       REMOTE_SEP_PATH=$(remote_helper_path_get "$SESS" sep)
       if [ -n "$REMOTE_SEP_PATH" ]; then USE_INLINE=0; else USE_INLINE=1; fi
