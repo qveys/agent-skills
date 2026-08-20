@@ -11,61 +11,20 @@ permissions:
 
 jobs:
   sync:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, hostinger]
     steps:
-      # Repo policy only allows local/same-owner actions, all SHA-pinned.
-      # No third-party action satisfies that for checkout/setup-node/PR creation,
-      # so this job uses the git/node/gh CLI already on the runner image instead.
-      # These runners keep their workspace between runs (unlike a hosted VM),
-      # so this step is written to be safe to re-run: reset any remote/config
-      # left by a previous job and wipe untracked/ignored leftovers.
-      #
-      # GH_TOKEN is scoped to this step (and the PR-creation step below) only.
-      # The auth header is set via `git config --local` (passing it through
-      # `-c` on the command line makes git fall back to an interactive
-      # credential prompt on 401, which fails non-interactively on the
-      # runner) and unset again right after use, so it's never left behind
-      # in .git/config on this shared, persistent runner.
+      # Repo policy requires SHA-pinning; actions/checkout and
+      # actions/setup-node are explicitly allow-listed (verified via
+      # `gh api repos/{owner}/{repo}/actions/permissions/selected-actions`),
+      # so no manual git/node reimplementation is needed here.
       - name: Checkout code
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init -q
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git" 2>/dev/null || \
-            git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git config --local "http.https://github.com/.extraheader" \
-            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git fetch --depth 1 origin "$GITHUB_REF"
-          git config --local --unset "http.https://github.com/.extraheader"
-          git checkout -f FETCH_HEAD
-          git clean -ffdx
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Self-hosted runners are shared across repos and not provisioned by
-      # this workflow, so Node may be absent or too old (e.g. system Node 18
-      # vs the ^20.19/22.12+ this project's toolchain needs). Download a
-      # local copy once per runner and prepend it to PATH instead of relying
-      # on (or mutating) whatever Node the runner happens to have installed.
-      - name: Ensure Node.js 22+
-        run: |
-          need_major=22
-          node_version=22.23.2
-          cur_major=$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)
-          if [ -n "$cur_major" ] && [ "$cur_major" -ge "$need_major" ]; then
-            echo "System Node v$cur_major already satisfies >= $need_major"
-            exit 0
-          fi
-          case "$(uname -m)" in
-            x86_64) node_arch=x64 ;;
-            aarch64) node_arch=arm64 ;;
-            *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
-          esac
-          node_dir="${RUNNER_TEMP:-/tmp}/node-v${node_version}-linux-${node_arch}"
-          if [ ! -x "$node_dir/bin/node" ]; then
-            curl -fsSL "https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-${node_arch}.tar.xz" \
-              -o "${RUNNER_TEMP:-/tmp}/node.tar.xz"
-            tar -xf "${RUNNER_TEMP:-/tmp}/node.tar.xz" -C "${RUNNER_TEMP:-/tmp}"
-          fi
-          echo "$node_dir/bin" >> "$GITHUB_PATH"
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -82,6 +41,9 @@ jobs:
             echo "changes=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # peter-evans/create-pull-request isn't on this repo's Actions allow-list
+      # (only actions/checkout and actions/setup-node are), so this uses the
+      # gh CLI already on the runner instead.
       - name: Create Pull Request
         if: steps.check_changes.outputs.changes == 'true'
         env:
@@ -89,17 +51,27 @@ jobs:
         run: |
           branch="chore/sync-upstream-skills"
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$branch"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Idempotent like peter-evans/create-pull-request: skip the
+          # commit/force-push if the sync branch already carries this exact
+          # diff, so re-runs with no new upstream changes don't spam pushes.
           git add -A
-          git commit -m "chore(sync): update upstream skills"
-          git config --local "http.https://github.com/.extraheader" \
-            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git push -f origin "$branch"
-          git config --local --unset "http.https://github.com/.extraheader"
+          new_tree=$(git write-tree)
+          old_tree=$(git fetch origin "$branch:refs/remotes/origin/$branch" 2>/dev/null \
+            && git rev-parse "origin/$branch^{tree}" 2>/dev/null || true)
+
+          if [ "$new_tree" = "$old_tree" ]; then
+            echo "No changes since last sync branch push; skipping commit/push."
+          else
+            git checkout -B "$branch"
+            git commit -m "🔄 chore(sync): update upstream skills"
+            git push -f origin "$branch"
+          fi
 
           if gh pr view "$branch" --json number >/dev/null 2>&1; then
-            echo "PR already exists for $branch; branch updated."
+            gh pr edit "$branch" --add-label automated-sync
+            echo "PR already exists for $branch."
           else
             gh pr create \
               --title "🔄 chore(sync): update upstream skills" \
