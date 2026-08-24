@@ -912,6 +912,33 @@ oneshot_ssh_is_inline() {
   [[ "$1" =~ ^(tailscale[[:space:]]+)?ssh[[:space:]].*[[:space:]][\"\'] ]]
 }
 
+# Does $1 (a `send` command) look like an INTERACTIVE ssh/tailscale-ssh hop
+# naming host $2 (no inline command — `ssh host`, not `ssh host 'cmd'`)?
+# Used by `send`'s framing decision to recognize THE ONE command that
+# actually performs a `--pre`-staged hop — before that send runs, the pane is
+# still local regardless of remote_mode, so it must be framed inline even
+# though helpers are already staged remotely. Deliberately excludes the
+# one-shot inline form (oneshot_ssh_is_inline): `ssh host 'cmd'` runs
+# remotely and returns immediately — the pane's own shell never leaves the
+# Mac, so it must NOT flip remote_mode.
+ssh_hop_targets_host() {
+  local cmd="$1" host="$2" word
+  [ -n "$host" ] || return 1
+  [[ "$cmd" =~ ^(tailscale[[:space:]]+)?ssh[[:space:]] ]] || return 1
+  oneshot_ssh_is_inline "$cmd" && return 1
+  set -f
+  for word in $cmd; do
+    case "$word" in
+      "$host" | *"@$host")
+        set +f
+        return 0
+        ;;
+    esac
+  done
+  set +f
+  return 1
+}
+
 # Update the per-session consecutive-count and warn from the 2nd match on.
 # $1 sess $2 cmd — no return value; state file write is the only side effect
 # besides the optional stderr line.
