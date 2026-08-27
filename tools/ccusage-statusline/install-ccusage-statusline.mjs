@@ -1129,10 +1129,21 @@ function updateSettings(settingsPath, runtime, statuslinePath, configPath) {
 // Command the statusline uses to request an out-of-band refresh. Both schedulers
 // refuse to start a second instance while one runs, so no extra lock is needed.
 // Without a scheduler there is nothing to kick, hence the null.
-function producerKickArgv(noSchedule) {
+//
+// macOS occasionally fails to auto-bootstrap this LaunchAgent at login (seen
+// after a reboot: absent from `launchctl list`, zero log lines, and a plain
+// `kickstart` failing silently with "Could not find service"). A plain kick
+// can't detect or fix that, so the cache stays stale until someone manually
+// re-bootstraps it. Bootstrapping defensively before every kickstart costs
+// nothing when the service is already loaded (it just errors and is ignored)
+// and self-heals the missed auto-load case instead.
+function producerKickArgv(noSchedule, plistPath) {
   if (noSchedule) return null;
   if (process.platform === "darwin") {
-    return ["/bin/launchctl", "kickstart", "-p", "gui/" + process.getuid() + "/" + LABEL];
+    const domain = "gui/" + process.getuid();
+    const script = "/bin/launchctl bootstrap " + domain + " " + quoteCommand(plistPath)
+      + " 2>/dev/null; exec /bin/launchctl kickstart -p " + quoteCommand(domain + "/" + LABEL);
+    return ["/bin/sh", "-c", script];
   }
   return ["schtasks.exe", "/Run", "/TN", WINDOWS_TASK_NAME];
 }
@@ -1172,6 +1183,8 @@ function launchAgentSource(homeDirectory, producerPath, configPath, interval, st
     <key>PATH</key>
     <string>${xmlEscape(schedulerPath)}</string>
   </dict>
+  <key>RunAtLoad</key>
+  <true/>
   <key>StartInterval</key>
   <integer>${interval}</integer>
   <!-- No ProcessType=Background: launchd treats those jobs as discretionary and
@@ -1190,12 +1203,16 @@ function launchAgentSource(homeDirectory, producerPath, configPath, interval, st
 `;
 }
 
+function macPlistPath(homeDirectory) {
+  return path.join(homeDirectory, "Library", "LaunchAgents", LABEL + ".plist");
+}
+
 function configureMacScheduler(homeDirectory, producerPath, configPath, interval, changes, shouldLoad) {
   const launchAgents = path.join(homeDirectory, "Library", "LaunchAgents");
   const logs = path.join(homeDirectory, "Library", "Logs");
   mkdirSync(launchAgents, { recursive: true });
   mkdirSync(logs, { recursive: true });
-  const plistPath = path.join(launchAgents, LABEL + ".plist");
+  const plistPath = macPlistPath(homeDirectory);
   const logPath = path.join(logs, LABEL + ".log");
   const result = writeManagedFile(
     plistPath,
@@ -1366,7 +1383,10 @@ function main() {
     interval_seconds: options.interval,
     stale_after_seconds: options.staleAfter,
   };
-  const kickArgv = producerKickArgv(options.noSchedule);
+  const kickArgv = producerKickArgv(
+    options.noSchedule,
+    process.platform === "darwin" ? macPlistPath(homeDirectory) : null
+  );
   if (kickArgv) {
     config.producer_kick_argv = kickArgv;
     config.refresh_throttle_seconds = Math.max(300, Math.floor(options.interval / 4));
