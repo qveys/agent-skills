@@ -103,6 +103,7 @@ scripts/wsh-live.sh banner {header|phase|step|done} ... [session]  # airy step b
 scripts/wsh-live.sh step-run <id> '<label>' '<command>' [session] [timeout_sec]  # banner step + send + wait-done in ONE call
 scripts/wsh-live.sh remote-init [session] [host]  # after an ssh hop: push helpers to [host] (or sticky inline-only without it)
 scripts/wsh-live.sh remote-init --pre <host> [session]  # RECOMMENDED when <host> is known: push helpers BEFORE the hop
+scripts/wsh-live.sh remote-init --container <container> [session]  # after `docker exec`: copy helpers into the container, same path
 scripts/wsh-live.sh local-init  [session]         # revert remote-init — back to local helper-file framing
 scripts/wsh-live.sh wait-done [session] [timeout_sec] [--print]    # wait for send exit footer; --print = + bounded output in one call
 scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / pane-side fn defs
@@ -267,6 +268,26 @@ Hors session SSH (local → local, ou hôte connu sans passer par une session
 cockpit), `scripts/wsh-push.sh` (ou `wsh file cp`) reste utilisable
 directement. Détails, fallback chain, méthodes : voir
 `docs/framing-and-transfer.md`.
+
+### Descendre d'une couche — conteneur
+
+Une fois DANS la session SSH, un `docker exec <c> bash`/`docker compose exec
+<c> bash` descend encore d'une couche : les helpers de la couche du dessus
+(hôte distant, ou ce Mac) ne sont plus atteignables depuis le conteneur — le
+`send` suivant continue d'émettre la forme courte `. '<chemin>' && ...` mais
+`<chemin>` n'existe pas dans le conteneur (`No such file or directory`,
+footer `exit` perdu). Appelle `remote-init --container <container>` juste
+après le `docker exec` — **pas de repli inline** ici :
+
+```bash
+$COCKPIT send 'docker compose exec paperclip bash' "$SESS"
+$COCKPIT remote-init --container paperclip "$SESS"
+# ... la forme courte de send/banner marche à nouveau, chemin inchangé ...
+```
+
+Copie les mêmes fichiers helper au même chemin absolu déjà enregistré pour la
+session — `send`/`banner` n'ont rien à changer. Détail (transport, cas
+local/distant) : voir `docs/framing-and-transfer.md`.
 
 ## Cleaning up — but not too fast
 

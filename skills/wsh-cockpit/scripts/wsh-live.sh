@@ -101,6 +101,15 @@
 #                              ssh`), so the FIRST send/banner after the hop already uses
 #                              the short remote sourcing form instead of the inline blob.
 #                              Same one-hop-only / best-effort-falls-back-to-inline rules.
+#   remote-init --container <container> [session]
+#                              descend ONE MORE layer: copy the sep/step helper files
+#                              already registered for the layer above (host, or this Mac
+#                              if the pane never left it) into <container> via `docker
+#                              exec`/`docker cp`, at the SAME absolute path — so send/
+#                              banner's short sourcing form keeps working unchanged after
+#                              `docker exec <container> bash`/`docker compose exec ...`.
+#                              Does NOT flip remote_mode/remote_helper_path (no framing-
+#                              mode switch, just a file push); best-effort, fails soft.
 #   local-init  [session]      revert remote-init — back to local helper-file framing
 #   push [session] <local> <remote-path>
 #   pull [session] <remote-path> <local>
@@ -453,6 +462,62 @@ pre_push_helpers() {  # $1 sess $2 host -> 0 staged, 1 skipped/failed
   # still on the Mac. `send`'s framing block detects the actual hop send
   # (ssh_hop_targets_host) and flips remote_mode ON only once that send runs.
   echo "pre-push: helpers staged on '$host':$remote_dir for session '$sess' — ready before the hop (remote mode flips ON once the hop send runs)"
+  return 0
+}
+
+# Used by `remote-init --container <name> [session]`: after the pane descends
+# ONE MORE layer with `docker exec`/`docker compose exec`, the helper file
+# already sourced by the layer above (host or this Mac — whichever
+# remote-init/--pre last registered, via remote_helper_path_get) isn't
+# reachable from inside the container, so the short `. '<path>' && ...` form
+# `send`/`banner` already emit fails with "No such file or directory" (see
+# docs/gotchas.md). Rather than switching that form (the user explicitly
+# rejected falling back to inline here), this copies the SAME helper files
+# into the container at the exact SAME absolute path already registered for
+# the session — so the short form send/banner keep emitting needs no change
+# at all. Runs docker exec/cp hors pane (never through `send`, same rationale
+# as push/pull) on whichever host the pane is actually on: the recorded
+# remote-init host, or this Mac if the pane never left it (`remote_host_get`
+# empty).
+container_push_helpers() {  # $1 sess $2 container -> 0 ok, 1 skipped/failed
+  local sess="$1" container="$2" host dir sep_path sep_b step_b cq dq cmd out rc
+  command -v docker >/dev/null 2>&1 || {
+    echo "warn: docker not found — cannot push helpers into container '$container'; send/banner keep sourcing the layer-above path, unreachable from inside the container — no inline fallback here (see docs/gotchas.md)" >&2
+    return 1
+  }
+  host=$(remote_host_get "$sess")
+  if [ -n "$host" ]; then
+    command -v tailscale >/dev/null 2>&1 || {
+      echo "warn: tailscale not found — cannot reach '$host' to push helpers into container '$container'" >&2
+      return 1
+    }
+  fi
+  # Directory already registered for the layer above: the remote path set by
+  # remote-init <host>/--pre <host>, or (pane never left this Mac) the local
+  # helpers dir itself — sep/step always live side by side (helper_ensure,
+  # lib/framing.sh), so sep's directory is step's too.
+  sep_path=$(remote_helper_path_get "$sess" sep)
+  if [ -n "$sep_path" ]; then dir=$(dirname "$sep_path")
+  else dir=$(dirname "$(sep_ensure_helpers)")
+  fi
+  sep_b=$(basename "$(sep_ensure_helpers)")
+  step_b=$(basename "$(step_ensure_helpers)")
+  # dir/container are caller-controlled and may legally contain a single
+  # quote — escape before embedding (same pattern as remote-init's REMOTE_DIR_Q).
+  cq=${container//\'/\'\\\'\'}
+  dq=${dir//\'/\'\\\'\'}
+  cmd="set -e; docker exec '${cq}' mkdir -p '${dq}'; docker cp '${dq}/${sep_b}' '${cq}:${dq}/'; docker cp '${dq}/${step_b}' '${cq}:${dq}/'"
+  set +e
+  if [ -z "$host" ]; then out=$(bash -c "$cmd" 2>&1)
+  else out=$(ts_ssh_direct "$host" "$cmd" 2>&1)
+  fi
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    echo "warn: failed to push helpers into container '$container' (rc=$rc): $out" >&2
+    return 1
+  fi
+  echo "helpers pushed into container '$container':$dir — send/banner keep the short sourcing form one layer deeper"
   return 0
 }
 
@@ -1023,6 +1088,20 @@ MSG
   fi
   block_id_store "$SESS" "$NEWID"
 
+  # Stamp the anchor tab on the SESSION environment. A Wave `cmd` block (which
+  # is what this attach block is) carries no WAVETERM_TABID/WAVETERM_BLOCKID in
+  # its environment — only WAVETERM, _SWAPTOKEN, _VERSION, _WSHBINDIR — and
+  # macOS SIP forbids reading another process's environment, so nothing can tell
+  # from the outside that this session is being viewed by a Wave block. The
+  # session environment is the only place that fact can live. Harmless where
+  # nothing reads it; on this machine it lets a prefix+s session picker offer
+  # its Wave-aware behaviour inside the cockpit instead of falling back to
+  # `choose-tree`, which would switch-client the block off its own session.
+  # Best-effort: never fail opening a cockpit over a marker.
+  if [ "$MUX" = tmux ]; then
+    "$MUX_BIN" set-environment -t "=$SESS" WT_TABID "$TAB" 2>/dev/null || true
+  fi
+
   # Verify a client actually joined (the attach can fail silently inside the
   # block, e.g. wrong tmux/path); poll adaptively instead of a flat 5x1s wait —
   # same growing-interval style as wait-done — so a fast attach returns almost
@@ -1070,6 +1149,13 @@ remote-init)
   # since $HOME is resolved directly over `tailscale ssh` — see
   # pre_push_helpers). Same one-hop-only / best-effort
   # fallback-to-inline semantics as the post-hop form above.
+  #
+  # --container <name> [session]: descend ONE MORE layer — copy the SAME
+  # helper files already registered for the layer above (host or this Mac)
+  # into a `docker exec`-reached container at the SAME absolute path, so
+  # send/banner's short sourcing form keeps working unchanged there too. Does
+  # NOT touch remote_mode/remote_helper_path (see container_push_helpers) —
+  # this is a file-transfer step, not a framing-mode switch.
   have_mux
   if [ "${1:-}" = "--pre" ]; then
     shift
@@ -1078,9 +1164,22 @@ remote-init)
     pre_push_helpers "$SESS" "$HOST"
     exit $?
   fi
+  if [ "${1:-}" = "--container" ]; then
+    shift
+    CONTAINER="${1:?usage: remote-init --container <container> [session]}"; shift || true
+    SESS=$(resolve_session "${1:-}"); need_session "$SESS"
+    container_push_helpers "$SESS" "$CONTAINER"
+    exit $?
+  fi
   SESS=$(resolve_session "${1:-}"); need_session "$SESS"
   HOST="${2:-}"
   if [ -z "$HOST" ]; then
+    # Purge any remote helper path left over from an earlier `remote-init
+    # <host>`/`--pre <host>` on THIS session first — otherwise send's framing
+    # check (remote_mode ON + a non-empty remote_helper_path) would keep
+    # sourcing that now-unreachable remote path instead of actually going
+    # inline (see docs/gotchas.md; same purge local-init already does).
+    remote_helper_paths_clear "$SESS"
     # remote_mode_set only prints "remote mode ON" once it actually flipped the
     # sticky tmux option; under zellij it's a no-op (its own stderr note
     # explains why), so gate the success line on its exit status instead of
@@ -1144,8 +1243,7 @@ local-init)
   # remote-init, so a later no-arg remote-init on the same session starts clean.
   have_mux
   SESS=$(resolve_session "${1:-}"); need_session "$SESS"
-  remote_helper_path_clear "$SESS" sep
-  remote_helper_path_clear "$SESS" step
+  remote_helper_paths_clear "$SESS"
   remote_host_clear "$SESS"
   # Same as remote-init: only claim "remote mode OFF" when the sticky tmux
   # option was actually cleared — under zellij this is a no-op (its own
