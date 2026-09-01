@@ -126,6 +126,46 @@ suit est le détail et le "pourquoi" derrière chacune.
   themselves against acting on a prefix at all (rather than just this one
   function's internal consistency) is deferred to
   `docs/plans/2026-08-02-desambiguisation-argument-session.md`.
+- **`docker exec`/`docker compose exec` is ANOTHER layer the pushed helpers
+  don't reach — symptom is `No such file or directory` on the helper file
+  right after the container hop, footer `exit` gone.** `remote-init <host>`/
+  `--pre <host>` push the sep/step helper files to a path on the HOST; once
+  the pane runs `docker exec paperclip bash` (or `docker compose exec ...`),
+  `send`/`banner` keep emitting the unchanged short form
+  `. '/home/qveys/.cache/wsh-cockpit/helpers/wsh-live-sep-v4.sh' && __wsh
+  ...` — framing mode didn't change, the pane just went one process deeper —
+  but that path is on the host's filesystem, not inside the container's, so
+  sourcing fails and the footer never prints. Falling back to inline framing
+  here was explicitly rejected (real workflow, 2026-09-01): the fix is
+  `remote-init --container <container> [session]`
+  (`container_push_helpers` in `wsh-live.sh`), which copies the SAME helper
+  files into the container at the SAME absolute path already registered for
+  the session (`remote_helper_path_get`) — the short form keeps working
+  unchanged because the path it sources now exists on both sides. Runs
+  `docker exec ... mkdir -p`/`docker cp` hors pane, on whichever host the
+  pane is actually on (over `tailscale ssh` if remote, plain locally if the
+  pane never hopped) — same out-of-pane rationale as `push`/`pull`, and like
+  them it does not count towards the one-shot SSH warning. Best-effort:
+  `docker`/`tailscale` missing or the container unreachable warns on stderr
+  and returns non-zero, never a hard fail — but deliberately no inline
+  fallback for this one case (see SKILL.md "Descendre d'une couche").
+  Covered by `selftest-live` cases 14a-14c (a fake `docker` on `$PATH`
+  records invocations; no real Docker install assumed).
+- **Bare `remote-init "$sess"` (no host) used to flip the sticky flag without
+  purging a STALE remote helper path — "inline-only" mode wasn't actually
+  inline if a `remote-init <host>` had run earlier on that same session.**
+  `send`'s framing check is `remote_mode_get` true AND
+  `remote_helper_path_get "$sess" sep` non-empty → use the (now possibly
+  unreachable) remote path; only when that path is EMPTY does it fall
+  through to inline. `local-init` always cleared both sep/step helper paths
+  before this fix; the no-host form of `remote-init` only ever called
+  `remote_mode_set "$sess" 1` and left whatever helper path was already
+  registered untouched — so a session that had done `remote-init "$sess"
+  <host>` and later called bare `remote-init "$sess"` to go inline kept
+  quietly sourcing the old remote path instead. Fixed by having the no-host
+  branch call the same `remote_helper_paths_clear` (`lib/session.sh`)
+  `local-init` already used, before setting the flag. Covered by
+  `selftest-live` case 13.
 - **`gc` now refuses to destroy its own session; `stop` refuses outright
   (exit 8).** (Task 1, lot 2.) `gc_should_kill` (`lib/gc.sh`) itself stays
   a pure idle/attached check — the own-session guard lives in `cmd_gc`

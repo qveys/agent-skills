@@ -826,6 +826,17 @@ remote_helper_path_clear() {  # $1 sess $2 kind
   [ "$MUX" = tmux ] || return 0
   tmux set-option -u -t "$1" "$(remote_helper_option "$2")" >/dev/null 2>&1 || true
 }
+# Shared by `local-init` and `remote-init` (no-host form): both switch a
+# session to a framing mode that must NOT source a helper file pushed by an
+# earlier `remote-init <host>`/`--pre <host>` — `local-init` already did this;
+# bare `remote-init "$sess"` used to only flip @wsh_remote_mode ON and leave a
+# stale remote_helper_path in place, so a session that previously had a real
+# `<host>` push would keep sourcing that (now unreachable) remote path instead
+# of actually going inline (see docs/gotchas.md).
+remote_helper_paths_clear() {  # $1 sess
+  remote_helper_path_clear "$1" sep
+  remote_helper_path_clear "$1" step
+}
 
 # --- Remote mode: recorded hop host (for out-of-pane push/pull) -------------
 # `remote-init <sess> <host>` / `remote-init --pre <host> <sess>` learn the

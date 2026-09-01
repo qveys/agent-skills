@@ -331,14 +331,118 @@ cmd_selftest_live() {
     remote_mode_set "$SESS" 0 >/dev/null 2>&1 || true
   fi
 
-  # 13. stop kills the session and removes its seq file
+  # 13. remote-init with NO host must purge a STALE remote helper path left
+  # by an earlier remote-init <host>/--pre <host> — otherwise "inline-only"
+  # mode isn't actually inline: remote_mode is ON but send's framing check
+  # (remote_mode_get true AND a non-empty remote_helper_path) still sources
+  # the now-unreachable remote path (real bug this fixes, see
+  # docs/gotchas.md). Seeds the exact residue a prior remote-init <host>
+  # would leave — remote_helper_path_set directly, no network involved —
+  # then checks the very next send is the self-contained inline blob, not
+  # `. '<stale-path>' && ...`. Same tmux-only limitation as checks 9-10/12
+  # (remote_mode_set/remote_helper_path_set are no-ops under zellij).
+  if [ "$MUX" != tmux ]; then
+    echo "skip 13 remote-init purges stale helper path (backend $MUX — no per-session option store)"
+  else
+    local stale_path
+    stale_path="/nonexistent/stale-helper-$$.sh"
+    remote_helper_path_set "$SESS" sep "$stale_path"
+    set +e
+    "$0" remote-init "$SESS" >/dev/null 2>&1
+    "$0" send 'echo RI_PURGE_MARK' "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    rc=$?
+    set -e
+    out=$("$0" read "$SESS" 60 2>&1 | tr -d '\r')
+    if [ "$rc" -eq 0 ] \
+       && ! printf '%s' "$out" | grep -Fq "$stale_path" \
+       && printf '%s' "$out" | grep -Fq 'RI_PURGE_MARK'; then
+      report_live_case "13 remote-init purges stale helper path" 0
+    else
+      report_live_case "13 remote-init purges stale helper path" 1 "rc=$rc — stale path '$stale_path' leaked into inline-mode send"
+    fi
+    "$0" local-init "$SESS" >/dev/null 2>&1 || true
+  fi
+
+  # 14. remote-init --container: pushes the sep/step helper files into a
+  # Docker container at the SAME absolute path already registered for the
+  # layer above (see container_push_helpers's CHANGE header in wsh-live.sh).
+  # A fake `docker` on PATH stands in for the real binary — this selftest
+  # never assumes Docker is installed — recording every invocation instead
+  # of actually copying anything. Three cases: (a) no remote helper path
+  # recorded (pane still local) falls back to the LOCAL helpers dir; (b) a
+  # registered remote helper path is reused verbatim, unchanged, so the file
+  # lands exactly where send/banner already expect it; (c) docker missing
+  # warns on stderr and fails soft (rc=1), never a hard failure.
+  local dbin dlog sep_b step_b tmpdir_c
+  tmpdir_c=$(mktemp -d "${TMPDIR:-/tmp}/wsh-container-test.XXXXXX")
+  dbin="$tmpdir_c/bin"; mkdir -p "$dbin"
+  dlog="$tmpdir_c/docker.log"
+  cat >"$dbin/docker" <<DOCKERFAKE
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$dlog"
+exit 0
+DOCKERFAKE
+  chmod +x "$dbin/docker"
+  sep_b=$(basename "$(sep_ensure_helpers)")
+  step_b=$(basename "$(step_ensure_helpers)")
+
+  # 14a: no remote helper path recorded -> local helpers dir.
+  remote_helper_path_clear "$SESS" sep
+  local local_dir
+  local_dir=$(dirname "$(sep_ensure_helpers)")
+  set +e
+  PATH="$dbin:$PATH" container_push_helpers "$SESS" "fake-container"
+  rc=$?
+  set -e
+  if [ "$rc" -eq 0 ] \
+     && grep -Fq "exec fake-container mkdir -p ${local_dir}" "$dlog" \
+     && grep -Fq "cp ${local_dir}/${sep_b} fake-container:${local_dir}/" "$dlog" \
+     && grep -Fq "cp ${local_dir}/${step_b} fake-container:${local_dir}/" "$dlog"; then
+    report_live_case "14a container push (local helpers dir)" 0
+  else
+    report_live_case "14a container push (local helpers dir)" 1 "rc=$rc log=$(cat "$dlog" 2>/dev/null)"
+  fi
+
+  # 14b: a remote helper path IS registered (layer above already ran
+  # remote-init <host>) -> that exact dir is reused, not the local one.
+  : >"$dlog"
+  remote_helper_path_set "$SESS" sep "/home/fake/.cache/wsh-cockpit/helpers/${sep_b}"
+  set +e
+  PATH="$dbin:$PATH" container_push_helpers "$SESS" "fake-container"
+  rc=$?
+  set -e
+  if [ "$rc" -eq 0 ] \
+     && grep -Fq "exec fake-container mkdir -p /home/fake/.cache/wsh-cockpit/helpers" "$dlog" \
+     && grep -Fq "cp /home/fake/.cache/wsh-cockpit/helpers/${sep_b} fake-container:/home/fake/.cache/wsh-cockpit/helpers/" "$dlog"; then
+    report_live_case "14b container push (registered remote dir)" 0
+  else
+    report_live_case "14b container push (registered remote dir)" 1 "rc=$rc log=$(cat "$dlog" 2>/dev/null)"
+  fi
+  remote_helper_path_clear "$SESS" sep
+
+  # 14c: docker absent -> warn on stderr + fail-soft rc=1, never a hard fail.
+  local emptybin err
+  emptybin="$tmpdir_c/emptybin"; mkdir -p "$emptybin"
+  set +e
+  err=$(PATH="$emptybin" container_push_helpers "$SESS" "fake-container" 2>&1 >/dev/null)
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ] && printf '%s' "$err" | grep -q 'docker'; then
+    report_live_case "14c container push without docker" 0
+  else
+    report_live_case "14c container push without docker" 1 "rc=$rc err=$err"
+  fi
+  rm -rf "$tmpdir_c"
+
+  # 15. stop kills the session and removes its seq file
   "$0" stop "$SESS" >/dev/null 2>&1 || true
   if mux_has "$SESS"; then
-    report_live_case "13 stop" 1 "session '$SESS' still alive"
+    report_live_case "15 stop" 1 "session '$SESS' still alive"
   elif [ -f "$SEQF" ]; then
-    report_live_case "13 stop" 1 "seq file still present: $SEQF"
+    report_live_case "15 stop" 1 "seq file still present: $SEQF"
   else
-    report_live_case "13 stop" 0
+    report_live_case "15 stop" 0
   fi
 
   if [ "$failures" -ne 0 ]; then
