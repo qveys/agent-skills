@@ -69,11 +69,15 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
   Hourly DB dumps in `.../data/backups/` are the cheapest way to read agent `status`, `adapter_type` and `error_reason` without a board key.
 - `ps`/`pgrep` are unreliable in this container (procps missing) — enumerate `/proc/[0-9]*/cmdline` instead.
 
-## `workspace_validation_failed` — the diagnosis freezes (2026-09-10)
+## `workspace_validation_failed` — the probe lies, not the workspace (2026-09-10)
 - Symptom: agents on git-sensitive adapters (`GIT_SENSITIVE_LOCAL_ADAPTER_TYPES`: `claude_local`, `codex_local`, `cursor`, `gemini_local`, `grok_local`, `hermes_local`…) stuck in `status=error` with
   *"Issue X requested isolated_workspace with git_worktree, but base workspace … is not a git checkout"*.
-- **The message can be long stale.** The probe is `isGitCheckout()` = `git rev-parse --git-dir` (heartbeat.ts), and it **logs a warn on every false**. If `docker logs paperclip | grep isGitCheckout` is empty while the error keeps being emitted, the failure is being **replayed from stored issue state**, not re-probed — the workspace may be perfectly fine now. Check it yourself as `node` before believing the message.
+- **The workspace is fine — the probe is wrong.** Measured 2026-09-10: the base workspace was polled at 1 Hz for 4 minutes and `git rev-parse --git-dir` returned `.git` on *every* sample, while the server emitted `git_worktree_base_not_git_checkout` for that exact path at 14:11:10 and 14:11:11. Don't waste time repairing the checkout.
+- **An empty `isGitCheckout` grep is the symptom, not an all-clear.** `isGitCheckout()` (heartbeat.ts) logs a warn on every failing path *except one*: `Boolean(readNonEmptyString(result.stdout))` returning false when git exits 0 with empty stdout. Silence means that silent path is being taken. Ruled out: `GIT_DIR`/`GIT_WORK_TREE` leaking through `process.env` (no assignment anywhere in the server, no such var in the container).
+- Failures arrive in **bursts every few minutes**; between bursts the probe succeeds. A one-off manual check proves nothing — correlate log timestamps with a continuous poll.
+- The agents themselves track this as **MYH-162** ("durable isGitCheckout fix"). Compounding it: the recovery route `POST /api/issues/:id/recovery-actions/resolve` answers **404** (8 of 19 calls, plus 5× 400), so agents cannot close their own recovery loop — hence duplicated worktrees (`pr-audit-merge-order` ×4, `auto-assign-unassigned-issues` ×3).
 - An agent in `status=error` is never retried on its own: it needs `agent resume` (board key required).
+- ⚠️ **Temporary instrumentation live since 2026-09-10** — `isGitCheckout` emits `MYH162-PROBE isGitCheckout result` with raw stdout/stderr, `GIT_*` env and uid. Original saved at `/docker/paperclip/server/src/services/heartbeat.ts.bak-myh162`. **Remove it and rebuild once the cause is found.**
 
 ## Removed boot steps (2026-09-10)
 - `47-register-qveys-agent-router-adapter.sh` + `58-qveys-agent-router.bg.sh` (commit `21e237fb4`) — OmniRoute router leftover; re-registered its adapter into `/app/data/adapter-plugins.json` on every boot and started `router.mjs` on 127.0.0.1:3188.
