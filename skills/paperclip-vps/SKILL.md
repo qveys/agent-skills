@@ -7,14 +7,15 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
 
 ## Topology
 - Host: `vps-openclaw` (tailnet `100.100.10.60`, hostname srv1453980). SSH: `ssh vps-openclaw` (host key already pinned in `known_hosts`; on a fresh machine, verify the host fingerprint out-of-band — provider console or `tailscale ssh` — before first connect; do NOT default to `accept-new`, it trusts whatever key a first-connection MITM presents).
-- Container: `paperclip-paperclip-1` (custom committed image), API on `100.100.10.60:3100`, UI served same port. Sidecar: `paperclip-hindsight-1`.
-- Bind mount: host `/docker/paperclip/data` ⇄ container `/paperclip`.
-- **The code that actually RUNS is the global install `/usr/local/lib/node_modules/paperclipai/` inside the container** (`node /usr/local/bin/paperclipai run` is PID 1). The npx caches under `/paperclip/.npm/_npx/<hash>/node_modules/@paperclipai/*` are **secondary copies** (11 hashes exist) — reading code there is fine, but runtime patches MUST hit the global install. Don't repeat the mistake of patching only the npx copy.
+- Container: **`paperclip`** (image `paperclip:local`, built from `/docker/paperclip` via `make build`), API on `100.100.10.60:3100`, UI served same port. Older notes saying `paperclip-paperclip-1` are stale. Unrelated sidecars on the same host: `paperclip-bef-paperclip-1`, `paperclip-bef-hindsight-1`.
+- **No app-data bind mount.** The only bind is `./data/.config/github-app:/paperclip/.config/github-app:ro`. Application data lives on the named volume mounted at `/app/data` (see Patch infrastructure).
+- **The code that actually RUNS is the repo build under `/app`** — PID 1 is `node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js`, running as uid 1000 (`node`), and the live logic is `/app/server/dist/services/*.js` (compiled from `/app/server/src`). Verified 2026-09-10: `grep 'is not a git checkout' /usr/local/lib/node_modules/paperclipai` returns nothing, `/app/server/dist/services/heartbeat.js` has it. The older claim that the global install `/usr/local/lib/node_modules/paperclipai/` is PID 1 is **stale** — check before patching. The npx caches under `/paperclip/.npm/_npx/<hash>/node_modules/@paperclipai/*` are **secondary copies** (11 hashes exist) — reading code there is fine, but runtime patches MUST hit the global install. Don't repeat the mistake of patching only the npx copy.
 
 ## CLI `paperclipai` (inside container)
-- Board auth: `docker exec -it paperclip-paperclip-1 paperclipai connect --persona board --token-name <label>` — **interactive** (user completes login; run it in the user's visible pane). Prints a `pcp_board_…` token (30-day expiry). The CLI context profile does NOT persist it for later `docker exec`s — and never put the token in shell history or process args (`-e KEY=…` is visible in `ps`). Write it to a `0600` env file instead (paste via `read`, not on the command line), then pass it with `--env-file`:
+- ⚠️ **The `paperclipai` CLI is NOT installed in the current image** (2026-09-10: `command -v paperclipai` → not found, `/app/cli/dist` absent). Building it in the container is a dead end: `npm run build` in `/app/cli` produces the bundle, but it imports `zod`, `postgres`, `@clack/prompts`… which are absent from the production image. **To get a board key, use the Paperclip UI over the tailnet.** The commands below only apply to an image that ships the CLI.
+- Board auth: `docker exec -it paperclip paperclipai connect --persona board --token-name <label>` — **interactive** (user completes login; run it in the user's visible pane). Prints a `pcp_board_…` token (30-day expiry). The CLI context profile does NOT persist it for later `docker exec`s — and never put the token in shell history or process args (`-e KEY=…` is visible in `ps`). Write it to a `0600` env file instead (paste via `read`, not on the command line), then pass it with `--env-file`:
   `umask 077; { echo PAPERCLIP_API_URL=http://localhost:3100; printf 'PAPERCLIP_API_KEY=%s\n' "$(read -rs t; echo "$t")"; } > /root/.pcp.env`
-  `docker exec --env-file /root/.pcp.env paperclip-paperclip-1 paperclipai …` — `rm /root/.pcp.env` once the session is done.
+  `docker exec --env-file /root/.pcp.env paperclip paperclipai …` — `rm /root/.pcp.env` once the session is done.
 - Useful: `company list`, `agent list -C <companyId>` (flag is `-C`, not `--company`), `agent get <agentId> --json`, `agent update <agentId> --payload-json '<json>'` (partial payload OK, e.g. just `{adapterConfig}`), `agent resume <agentId>` (clears error status), `heartbeat run -a <agentId> --timeout-ms 90000` (triggers a REAL adapter run with live logs — the best end-to-end validation).
 - HTTP API mirror: `/api/*`, `Authorization: Bearer <key>`. **Only ever call it over the tailnet address (`100.100.10.60`, already end-to-end encrypted by Tailscale's WireGuard between authenticated peers) or the container's own loopback (`docker exec`'s `http://localhost:3100`, never leaves the box)** — never bind/forward port 3100 beyond the tailnet, which would put the bearer token on a genuinely cleartext path. Routes: `PATCH /api/agents/:id`, `GET /api/companies/:id/agents`, `POST /api/companies/:id/adapters/:type/test-environment`.
 
@@ -54,6 +55,36 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
 - Container name on this host is **`paperclip`** (image `paperclip:local`), not `paperclip-paperclip-1`.
 - Ship scripts to the VPS by `base64 | tr -d '\n'` locally, then `echo <b64> | base64 -d > file` remotely (avoids quoting hell in typed panes).
 - **`entrypoint.d` boot steps can't patch root-owned `node_modules` even when the script itself is written as root** (2026-08-17, `42-openclaw-protocol-v4.sh`): the boot step runs non-root at container start, so writes into the global install fail there. Fix: bake the patch in at **build time** instead — `/opt/paperclip/build.d/NN-name.sh` invoked via a `RUN` line in the image's Dockerfile (runs as root during `docker build`). Verified end-to-end for `openclaw-protocol-v4` (global + npx caches patched, `make build && restart`, ~184s rebuild). Prefer `build.d` over `entrypoint.d` whenever the patch touches root-owned paths.
+
+## Companies & agent workspaces (2026-09-10)
+- Two live companies. Names are **not** in the filesystem — read them from an hourly dump:
+  `zcat /app/data/instances/default/data/backups/paperclip-<ts>.sql.gz | grep -A8 'COPY "public"."companies"'`.
+  - `e7bc4ba4-3e10-4261-b25a-00d6ccb438ca` = **My-Housekeeper** (project `my-housekeeper`)
+  - `0c68c58b-93e9-465c-8d97-5db02d060598` = **Markify** (project `markify`)
+- `companies/MyHousekeeper/` (slug-named, frozen 2026-09-01) is a **stale leftover** — live data is under the UUID dirs.
+- Agent repos live at `/app/data/instances/default/projects/<companyId>/<projectId>/<repo>`, owned by `node` (uid 1000).
+  **Always `docker exec -u node paperclip git -C <path> …`** — as root, git reports a different state (dubious ownership).
+  Paperclip-managed worktrees sit in `<repo>/.paperclip/worktrees/<BRANCH>`, one per issue.
+- Run logs (ndjson, per company/agent/run): `/app/data/instances/default/data/run-logs/<companyId>/<agentId>/<runId>.ndjson`.
+  Hourly DB dumps in `.../data/backups/` are the cheapest way to read agent `status`, `adapter_type` and `error_reason` without a board key.
+- `ps`/`pgrep` are unreliable in this container (procps missing) — enumerate `/proc/[0-9]*/cmdline` instead.
+
+## `workspace_validation_failed` — the diagnosis freezes (2026-09-10)
+- Symptom: agents on git-sensitive adapters (`GIT_SENSITIVE_LOCAL_ADAPTER_TYPES`: `claude_local`, `codex_local`, `cursor`, `gemini_local`, `grok_local`, `hermes_local`…) stuck in `status=error` with
+  *"Issue X requested isolated_workspace with git_worktree, but base workspace … is not a git checkout"*.
+- **The message can be long stale.** The probe is `isGitCheckout()` = `git rev-parse --git-dir` (heartbeat.ts), and it **logs a warn on every false**. If `docker logs paperclip | grep isGitCheckout` is empty while the error keeps being emitted, the failure is being **replayed from stored issue state**, not re-probed — the workspace may be perfectly fine now. Check it yourself as `node` before believing the message.
+- An agent in `status=error` is never retried on its own: it needs `agent resume` (board key required).
+
+## Removed boot steps (2026-09-10)
+- `47-register-qveys-agent-router-adapter.sh` + `58-qveys-agent-router.bg.sh` (commit `21e237fb4`) — OmniRoute router leftover; re-registered its adapter into `/app/data/adapter-plugins.json` on every boot and started `router.mjs` on 127.0.0.1:3188.
+- `58-agent-model-policy.bg.sh` (commit `15106abbb`) — applied `patches/agent-model-policy/`, which assigned `paperclip/<role>` models *"across all companies"* by role. Those models do not exist anywhere (neither in the `paperclipai` package nor in the router) → Markify's runs failed with *"issue with the selected model (paperclip/pm)"*. The payloads stay in the repo as dead code, reactivatable.
+- Left in place on purpose: `56-junie-omniroute-models.sh` (writes junie model profiles only, does not touch agents).
+- The stale `qveys-agent-router` entry was also removed from `/app/data/adapter-plugins.json` (a `.bak-<ts>` sits beside it). **That store is on the volume: deleting a boot step does not clean what it already wrote.**
+
+## Signing commits on this host
+- Use the host's own key: `/home/qveys/.ssh/id_ed25519_signing` (`SHA256:nUWSPv7rL5MtqRJnxfb5bDGMbdLy2ibg67ykgxp7wec`), no passphrase.
+  The 1Password key never reaches the VPS — `SSH_AUTH_SOCK` is empty under `tailscale ssh`, so `git commit -S` dies with `Couldn't get agent socket?`.
+  Trap: `/docker/paperclip/.git/config` held the Mac's **literal public key** as `user.signingkey`. `~/.ssh/allowed_signers` is configured, so `git log --format=%G?` returns `G`.
 
 ## ui-parser.cjs (adapterUiParser) — deployed but flaky (open as of 2026-08-17 21:58)
 - Found implemented in the image but never deployed; `make build && restart` deploys it (10832B, 4-fixture smoke test passed).
