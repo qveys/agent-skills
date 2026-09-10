@@ -69,15 +69,24 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
   Hourly DB dumps in `.../data/backups/` are the cheapest way to read agent `status`, `adapter_type` and `error_reason` without a board key.
 - `ps`/`pgrep` are unreliable in this container (procps missing) — enumerate `/proc/[0-9]*/cmdline` instead.
 
-## `workspace_validation_failed` — the probe lies, not the workspace (2026-09-10)
-- Symptom: agents on git-sensitive adapters (`GIT_SENSITIVE_LOCAL_ADAPTER_TYPES`: `claude_local`, `codex_local`, `cursor`, `gemini_local`, `grok_local`, `hermes_local`…) stuck in `status=error` with
-  *"Issue X requested isolated_workspace with git_worktree, but base workspace … is not a git checkout"*.
-- **The workspace is fine — the probe is wrong.** Measured 2026-09-10: the base workspace was polled at 1 Hz for 4 minutes and `git rev-parse --git-dir` returned `.git` on *every* sample, while the server emitted `git_worktree_base_not_git_checkout` for that exact path at 14:11:10 and 14:11:11. Don't waste time repairing the checkout.
-- **An empty `isGitCheckout` grep is the symptom, not an all-clear.** `isGitCheckout()` (heartbeat.ts) logs a warn on every failing path *except one*: `Boolean(readNonEmptyString(result.stdout))` returning false when git exits 0 with empty stdout. Silence means that silent path is being taken. Ruled out: `GIT_DIR`/`GIT_WORK_TREE` leaking through `process.env` (no assignment anywhere in the server, no such var in the container).
-- Failures arrive in **bursts every few minutes**; between bursts the probe succeeds. A one-off manual check proves nothing — correlate log timestamps with a continuous poll.
-- The agents themselves track this as **MYH-162** ("durable isGitCheckout fix"). Compounding it: the recovery route `POST /api/issues/:id/recovery-actions/resolve` answers **404** (8 of 19 calls, plus 5× 400), so agents cannot close their own recovery loop — hence duplicated worktrees (`pr-audit-merge-order` ×4, `auto-assign-unassigned-issues` ×3).
-- An agent in `status=error` is never retried on its own: it needs `agent resume` (board key required).
-- ⚠️ **Temporary instrumentation live since 2026-09-10** — `isGitCheckout` emits `MYH162-PROBE isGitCheckout result` with raw stdout/stderr, `GIT_*` env and uid. Original saved at `/docker/paperclip/server/src/services/heartbeat.ts.bak-myh162`. **Remove it and rebuild once the cause is found.**
+## `promisify(execFile)` loses its custom symbol — root cause of MYH-162 (2026-09-10)
+- **Symptom**: agents on git-sensitive adapters (`GIT_SENSITIVE_LOCAL_ADAPTER_TYPES`: `claude_local`, `codex_local`, `cursor`, `gemini_local`, `grok_local`, `hermes_local`…) stuck in `status=error` with *"Issue X requested isolated_workspace with git_worktree, but base workspace … is not a git checkout"*. The workspace is perfectly fine.
+- **Root cause, measured by instrumenting the probe**: in the server process, `execFile` has **lost its `nodejs.util.promisify.custom` symbol**. Without it, `promisify()` resolves the *first callback value* — `stdout` as a plain string — instead of `{ stdout, stderr }`. Callers then read `result.stdout === undefined`. Captured evidence:
+  `resultType: "string"`, `resultPreview: "\".git\\n\""`, `stdoutType: "undefined"`, `hasPromisifyCustom: "undefined"`.
+- **Why it was invisible**: the promise *resolves*, so `isGitCheckout()` never reaches its `.catch()` and never logs. `readNonEmptyString(undefined)` → `null` → `false`, silently. **An empty `grep isGitCheckout` on the logs is the symptom, not an all-clear.**
+- **It is systematic, not intermittent** (2/2 captured probes failed). Apparent "bursts" are just when heartbeats run. It breaks *every* git-sensitive run, and every `execFile(...).stdout` reader — including the materialization `git clone`, which explains the `git_worktree_base_materialization_failed` entries too.
+- **Fix applied 2026-09-10** — normalize once, at the definition, in both `services/heartbeat.ts` and `services/git-credentials.ts`, rather than patching each call site:
+  ```ts
+  const execFilePromisified = promisify(execFileCallback);
+  const execFile = ((...args: unknown[]) =>
+    (execFilePromisified as unknown as (...a: unknown[]) => Promise<unknown>)(...args).then(
+      (result) => (typeof result === "string" ? { stdout: result, stderr: "" } : result),
+    )) as unknown as typeof execFilePromisified;
+  ```
+- **Still unexplained**: *what* strips the symbol. No module under `node_modules` reassigns `execFile` or touches `promisify.custom`; plugins never reference `child_process`. Outside the server process — same container, same uid, CJS and ESM, with and without the tsx loader — the symbol is present (`custom=function`). Treat any new `promisify(<node callback API>)` in this codebase as suspect.
+- **Debugging recipe that worked**: poll the workspace at 1 Hz while grepping the logs for the failure timestamp. Seeing the workspace healthy at the exact second the server declares it broken is what rules out the filesystem and points at the probe.
+- Compounding issue: the recovery route `POST /api/issues/:id/recovery-actions/resolve` answers **404** (8 of 19 calls, plus 5× 400), so agents cannot close their own recovery loop — hence duplicated worktrees (`pr-audit-merge-order` ×4, `auto-assign-unassigned-issues` ×3).
+- An agent left in `status=error` is never retried on its own: it needs `agent resume` (board key required).
 
 ## Removed boot steps (2026-09-10)
 - `47-register-qveys-agent-router-adapter.sh` + `58-qveys-agent-router.bg.sh` (commit `21e237fb4`) — OmniRoute router leftover; re-registered its adapter into `/app/data/adapter-plugins.json` on every boot and started `router.mjs` on 127.0.0.1:3188.
