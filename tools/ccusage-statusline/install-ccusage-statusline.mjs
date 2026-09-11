@@ -661,12 +661,20 @@ function resolveCcusage(config) {
 
 function runCcusage(binary, args) {
   const useShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(binary);
-  const result = childProcess.spawnSync(binary, args, {
-    encoding: "utf8",
-    shell: useShell,
-    timeout: 30 * 60 * 1000,
-    maxBuffer: 32 * 1024 * 1024,
-  });
+  // With shell:true the whole line goes through cmd.exe, which splits on
+  // spaces and reads metacharacters. A Windows path cannot contain '"', so
+  // wrapping every token is enough to neutralise both.
+  const quote = function (value) { return '"' + value + '"'; };
+  const result = childProcess.spawnSync(
+    useShell ? quote(binary) : binary,
+    useShell ? args.map(quote) : args,
+    {
+      encoding: "utf8",
+      shell: useShell,
+      timeout: 30 * 60 * 1000,
+      maxBuffer: 32 * 1024 * 1024,
+    }
+  );
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error("ccusage " + args[0] + " failed: " + (result.stderr || "exit " + result.status).trim());
@@ -923,10 +931,18 @@ function commandNeedsShell(command) {
   return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
 }
 
+// With shell:true the command line is handed to cmd.exe, which splits on
+// spaces and interprets metacharacters. A Windows path cannot contain '"',
+// so wrapping every token is enough to neutralise both.
+function shellQuote(value) {
+  return '"' + String(value) + '"';
+}
+
 function run(command, args, options = {}) {
-  return spawnSync(command, args, {
+  const shell = commandNeedsShell(command);
+  return spawnSync(shell ? shellQuote(command) : command, shell ? args.map(shellQuote) : args, {
     encoding: "utf8",
-    shell: commandNeedsShell(command),
+    shell: shell,
     stdio: options.inherit ? "inherit" : "pipe",
     input: options.input,
     timeout: options.timeout,
