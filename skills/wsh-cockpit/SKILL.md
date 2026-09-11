@@ -155,6 +155,10 @@ $COCKPIT remote-init --container paperclip "$SESS"
 # ... la forme courte de send/banner marche à nouveau, chemin inchangé ...
 ```
 
+`paperclip` ci-dessus est le **nom du conteneur** — ce que `docker exec`/`docker cp`
+exigent. Si le nom du service Compose diffère du nom du conteneur, résous-le d'abord :
+`docker ps --filter name=<service> --format '{{.Names}}'`.
+
 Copie les mêmes fichiers helper au même chemin absolu déjà enregistré pour la
 session — `send`/`banner` n'ont rien à changer. Détail (transport, cas
 local/distant) : voir `docs/framing-and-transfer.md`.
