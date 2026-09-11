@@ -480,7 +480,7 @@ pre_push_helpers() {  # $1 sess $2 host -> 0 staged, 1 skipped/failed
 # remote-init host, or this Mac if the pane never left it (`remote_host_get`
 # empty).
 container_push_helpers() {  # $1 sess $2 container -> 0 ok, 1 skipped/failed
-  local sess="$1" container="$2" host dir sep_path sep_b step_b cq dq cmd out rc
+  local sess="$1" container="$2" host dir sep_path step_path sep_b step_b cq dq cmd out rc
   command -v docker >/dev/null 2>&1 || {
     echo "warn: docker not found — cannot push helpers into container '$container'; send/banner keep sourcing the layer-above path, unreachable from inside the container — no inline fallback here (see docs/gotchas.md)" >&2
     return 1
@@ -492,16 +492,22 @@ container_push_helpers() {  # $1 sess $2 container -> 0 ok, 1 skipped/failed
       return 1
     }
   fi
-  # Directory already registered for the layer above: the remote path set by
+  # Path already registered for the layer above: the remote paths set by
   # remote-init <host>/--pre <host>, or (pane never left this Mac) the local
-  # helpers dir itself — sep/step always live side by side (helper_ensure,
-  # lib/framing.sh), so sep's directory is step's too.
+  # helper files themselves — sep/step always live side by side (helper_ensure,
+  # lib/framing.sh), so sep's directory is step's too. BASENAMES come from the
+  # recorded paths too, not from the local helpers: what send/banner source is
+  # that exact path, so a registration left by an older/renamed helper version
+  # must be recreated verbatim inside the container — deriving the names from
+  # the local sep/step would copy files the short sourcing form never reads.
   sep_path=$(remote_helper_path_get "$sess" sep)
-  if [ -n "$sep_path" ]; then dir=$(dirname "$sep_path")
-  else dir=$(dirname "$(sep_ensure_helpers)")
+  step_path=$(remote_helper_path_get "$sess" step)
+  if [ -n "$sep_path" ]; then dir=$(dirname "$sep_path"); sep_b=$(basename "$sep_path")
+  else dir=$(dirname "$(sep_ensure_helpers)"); sep_b=$(basename "$(sep_ensure_helpers)")
   fi
-  sep_b=$(basename "$(sep_ensure_helpers)")
-  step_b=$(basename "$(step_ensure_helpers)")
+  if [ -n "$step_path" ]; then step_b=$(basename "$step_path")
+  else step_b=$(basename "$(step_ensure_helpers)")
+  fi
   # dir/container are caller-controlled and may legally contain a single
   # quote — escape before embedding (same pattern as remote-init's REMOTE_DIR_Q).
   cq=${container//\'/\'\\\'\'}
