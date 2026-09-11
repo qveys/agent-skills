@@ -267,14 +267,78 @@ cmd_selftest_live() {
     report_live_case "11 step-run" 1 "rc=$rc want=3, missing step banner label and/or command output"
   fi
 
-  # 12. stop kills the session and removes its seq file
+  # 12. `--pre`-style staged-but-not-yet-hopped scenario (regression test for
+  # the real bug: pre_push_helpers used to flip remote_mode ON as soon as
+  # helpers were staged, before the pane had actually hopped — so the very
+  # next send, the hop itself, tried to source a "remote" path on a still-
+  # local pane and failed with "no such file or directory"). Seeds the exact
+  # state pre_push_helpers leaves (remote_host_set/remote_helper_path_set,
+  # remote_mode left OFF) with no real network involved; a local shell
+  # function stands in for `ssh` so the "hop" never touches the network, and
+  # the "remote" path is the real local default helper file so post-hop
+  # sourcing genuinely succeeds once remote_mode flips ON. Same tmux-only
+  # limitation as checks 9-10 (remote_mode_set is a no-op under zellij).
+  if [ "$MUX" != tmux ]; then
+    echo "skip 12 pre-staged hop framing (backend $MUX — no per-session option store)"
+  else
+    local default_sep_helper rc_a rc_b out_a out_b flat_a flat_b
+    default_sep_helper=$(sep_ensure_helpers)
+    remote_host_set "$SESS" "fake-e2e-host"
+    remote_helper_path_set "$SESS" sep "$default_sep_helper"
+
+    set +e
+    "$0" send "ssh() { printf 'FAKE_SSH_HOP_TO:%s\n' \"\$1\"; }" "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    "$0" send 'ssh fake-e2e-host' "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    rc_a=$?
+    set -e
+    # `read`, not `output`: the raw typed prefix (the sourcing form or the
+    # inline block) is echoed as pane input BEFORE the __wsh-rendered banner
+    # even starts — `output` only isolates the rendered banner segment, which
+    # never shows that prefix either way. The inline form never calls __wsh
+    # at all (sep_wrap_inline wraps the raw command directly in `{ cmd; }`),
+    # so its presence/absence of `{ ssh fake-e2e-host; }` is what distinguishes
+    # it from the sourcing form's `. '<path>' && __wsh 'N' 'ssh fake-e2e-host'`
+    # — command text is unique enough in this session that scrollback from
+    # earlier cases can't produce a false match.
+    out_a=$("$0" read "$SESS" 80 2>&1 | tr -d '\r')
+    flat_a=$(printf '%s' "$out_a" | tr -d '\n')
+
+    set +e
+    "$0" send 'echo POST_HOP_MARK' "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    rc_b=$?
+    set -e
+    out_b=$("$0" read "$SESS" 80 2>&1 | tr -d '\r')
+    flat_b=$(printf '%s' "$out_b" | tr -d '\n')
+
+    if [ "$rc_a" -eq 0 ] \
+       && printf '%s' "$flat_a" | grep -Fq '{ ssh fake-e2e-host; }' \
+       && printf '%s' "$out_a" | grep -Fq 'FAKE_SSH_HOP_TO:fake-e2e-host' \
+       && ! printf '%s' "$flat_a" | grep -Eq "__wsh '[0-9]+' 'ssh fake-e2e-host'" \
+       && [ "$rc_b" -eq 0 ] \
+       && printf '%s' "$flat_b" | grep -Fq ". '${default_sep_helper}' && __wsh '" \
+       && printf '%s' "$flat_b" | grep -Fq "'echo POST_HOP_MARK'" \
+       && printf '%s' "$out_b" | grep -Fq 'POST_HOP_MARK'; then
+      report_live_case "12 pre-staged hop framing" 0
+    else
+      report_live_case "12 pre-staged hop framing" 1 "rc_a=$rc_a rc_b=$rc_b — hop send must be inline (no sourcing of staged path) and flip remote_mode; post-hop send must use the staged path"
+    fi
+
+    remote_helper_path_clear "$SESS" sep
+    remote_host_clear "$SESS"
+    remote_mode_set "$SESS" 0 >/dev/null 2>&1 || true
+  fi
+
+  # 13. stop kills the session and removes its seq file
   "$0" stop "$SESS" >/dev/null 2>&1 || true
   if mux_has "$SESS"; then
-    report_live_case "12 stop" 1 "session '$SESS' still alive"
+    report_live_case "13 stop" 1 "session '$SESS' still alive"
   elif [ -f "$SEQF" ]; then
-    report_live_case "12 stop" 1 "seq file still present: $SEQF"
+    report_live_case "13 stop" 1 "seq file still present: $SEQF"
   else
-    report_live_case "12 stop" 0
+    report_live_case "13 stop" 0
   fi
 
   if [ "$failures" -ne 0 ]; then
@@ -753,6 +817,38 @@ cmd_selftest_oneshot_ssh() {
   fi
 
   rm -f "$F" 2>/dev/null || true
+
+  # 9-12. ssh_hop_targets_host: the `--pre` hop-detection used by `send`'s
+  # framing decision (wsh-live.sh) to force inline framing for the ONE send
+  # that actually performs a pre-staged hop. Pure pattern match, no tmux/
+  # network needed — same spirit as cases 1-5 above.
+  if ssh_hop_targets_host 'tailscale ssh vps-dokploy 2>&1' vps-dokploy; then
+    report_oneshot_case "9 hop matches interactive tailscale ssh to staged host" 0
+  else
+    report_oneshot_case "9 hop matches interactive tailscale ssh to staged host" 1
+  fi
+
+  if ssh_hop_targets_host 'ssh vps-dokploy' vps-dokploy; then
+    report_oneshot_case "10 hop matches bare interactive ssh to staged host" 0
+  else
+    report_oneshot_case "10 hop matches bare interactive ssh to staged host" 1
+  fi
+
+  # does NOT match: wrong host (deviating from the pre-staged --pre target).
+  if ssh_hop_targets_host 'ssh other-host' vps-dokploy; then
+    report_oneshot_case "11 hop no match on different host" 1 "flagged a hop to an un-staged host"
+  else
+    report_oneshot_case "11 hop no match on different host" 0
+  fi
+
+  # does NOT match: one-shot inline form (runs remotely and returns
+  # immediately — the pane's own shell never leaves the Mac, so it must not
+  # be treated as the hop that flips remote_mode).
+  if ssh_hop_targets_host "tailscale ssh vps-dokploy 'echo hi' 2>&1" vps-dokploy; then
+    report_oneshot_case "12 hop no match on one-shot inline form" 1 "flagged a one-shot inline command as the hop"
+  else
+    report_oneshot_case "12 hop no match on one-shot inline form" 0
+  fi
 
   if [ "$failures" -ne 0 ]; then
     echo "selftest-oneshot-ssh: $failures failure(s)" >&2
