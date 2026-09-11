@@ -21,7 +21,7 @@ zellij_pane() { cat "$(pane_file "$1")" 2>/dev/null || true; }
 
 mux_has() {
   # "=" anchors on exact session name (tmux tries exact -> prefix -> fnmatch
-  # otherwise — measured; see docs/gotchas.md). Strip any leading "=" the
+  # otherwise — measured; see docs/internals.md). Strip any leading "=" the
   # caller may already have supplied before re-anchoring: "==name" matches
   # nothing (same guard session_is_own already applies in lib/session.sh).
   if [ "$MUX" = tmux ]; then local s="${1#=}"; tmux has-session -t "=$s" 2>/dev/null
@@ -76,7 +76,7 @@ mux_capture() {  # $1 sess  $2 lines of scrollback to look back
 }
 mux_clients() {  # attached client lines (empty output = nobody watching)
   # "list-clients" takes a target-SESSION and honors "=" (measured; see
-  # docs/gotchas.md) — same anchoring as mux_has/mux_kill, same rationale.
+  # docs/internals.md) — same anchoring as mux_has/mux_kill, same rationale.
   # Free to add: all 4 callers (wsh-live.sh:441,477,727,730) only ever pass
   # names already validated by need_session/last_session.
   if [ "$MUX" = tmux ]; then local s="${1#=}"; tmux list-clients -t "=$s" 2>/dev/null
@@ -140,7 +140,7 @@ mux_session_name() {  # canonical name the target actually resolves to, best-eff
 }
 mux_pane_last_line() {  # last non-blank captured line of the pane's active pane, best-effort
   # -J joins tmux-wrapped physical rows back into one logical line: measured
-  # (docs/gotchas.md), a padded right-prompt (RPROMPT) segment can occupy a
+  # (docs/internals.md), a padded right-prompt (RPROMPT) segment can occupy a
   # row wider than #{pane_width} without ever setting the wrap flag, and even
   # when it does wrap, -J re-joins it — either way the caller always sees the
   # true tail of the logical prompt line, never a truncated physical row.
