@@ -117,9 +117,9 @@ footer shows exit 0 *and* probe is ok. Prefer **one chained cockpit command**
 (wait loop inside the pane) instead of relying on agent-side `sleep`:
 ```bash
 # Option A — helper on remote (deploy via wsh-push.sh):
-$COCKPIT send 'bash ~/wsh-gw-restart.sh 60' cockpit-theo-plan-225108
+$COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' cockpit-theo-plan-225108
 # Option B — inline wait loop in a single send:
-$COCKPIT send 'openclaw gateway restart; EL=0; while [ $EL -lt 60 ]; do sleep 3; EL=$((EL+3)); openclaw gateway status 2>&1 | grep -q "Connectivity probe: ok" && echo READY:$EL && break; echo waiting:$EL; done; openclaw gateway status | head -12'
+$COCKPIT send 'openclaw gateway restart; EL=0; while [ $EL -lt 60 ]; do sleep 3; EL=$((EL+3)); openclaw gateway status 2>&1 | grep -q "Connectivity probe: ok" && echo READY:$EL && break; echo waiting:$EL; done; openclaw gateway status 2>&1 | head -12'
 ```
 Only after `Connectivity probe: ok` → send the next step (`infer`, `agent`,
 etc.). OpenClaw also supports `openclaw gateway restart --wait 45s` when run
@@ -152,9 +152,9 @@ $COCKPIT send 'openclaw doctor' "$SESS"
   **one-shot** `tailscale ssh host '<cmd> 2>&1'` qui retourne et imprime le footer.
 - **Ce one-shot est pour un diagnostic ponctuel, pas pour travailler.** Pour du
   travail réel sur un hôte, ouvre une session SSH persistante (une seule fois)
-  au lieu d'enchaîner des one-shots — voir SKILL.md "Travailler sur un hôte
-  distant". `send` avertit sur stderr (jamais bloquant) à partir du 2e one-shot
-  SSH consécutif.
+  au lieu d'enchaîner des one-shots — voir SKILL.md "Hôte distant — une
+  session, pas une rafale". `send` avertit sur stderr (jamais bloquant) à
+  partir du 2e one-shot SSH consécutif.
 
 ## Never send the next command until the previous one shows exit in the pane
 

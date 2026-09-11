@@ -55,18 +55,18 @@ commande, sache sur quelle machine, dans quel répertoire et sous quelle identit
 tu parles — sinon tu pilotes à l'aveugle.
 
 **Hôte déjà connu — pré-push avant le hop (voie recommandée).** `--pre <host>`
-pousse les helpers sur `<host>` **avant** le `ssh` du pane, en résolvant `$HOME`
-distant hors pane. Le premier `send`/`banner` après le hop est donc déjà en forme
+pousse les helpers sur `<host>` **avant** le `ssh` du pane, `$HOME` résolu hors
+pane. Le premier `send`/`banner` après le hop est donc déjà en forme
 courte (~100 caractères), jamais le blob inline :
 
 ```bash
 COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
 $COCKPIT spawn theo-plan --pre macbook-openclaw
 # → SESSION=cockpit-... puis "pre-push: helpers staged on '...' — remote mode ON"
-$COCKPIT send 'tailscale ssh macbook-openclaw' "$SESS"   # le hop lui-même
-$COCKPIT send 'hostname' "$SESS"   # le hop n'émet pas de footer : ne pas wait-done dessus
+$COCKPIT send 'tailscale ssh macbook-openclaw' "$SESS"   # le hop, sans footer/wait-done
+$COCKPIT send 'hostname 2>&1' "$SESS"   # sonde avec footer : wait-done s'applique ici
 $COCKPIT wait-done "$SESS" 60
-$COCKPIT send 'docker ps' "$SESS"  # déjà en forme courte
+$COCKPIT send 'docker ps 2>&1' "$SESS"  # déjà en forme courte
 ```
 
 Sur une session déjà spawnée : `$COCKPIT remote-init --pre <host> "$SESS"`, puis
