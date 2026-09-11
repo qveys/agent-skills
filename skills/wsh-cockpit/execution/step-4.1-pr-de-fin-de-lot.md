@@ -24,9 +24,13 @@ c'est le livrable chiffré du chantier.
 - [ ] Relire le diff complet du chantier (`git diff master...HEAD`) et vérifier
       qu'aucune coupe n'a emporté de la donnée (décision actée n°4 de
       CONVENTIONS.md : couper du chatter, jamais de la donnée).
-- [ ] Lancer la suite complète : `selftest-docs`, `-sep`, `-output`, `-live`,
-      `-gc`, `-claim`, `-oneshot-ssh`, `-transfer`, `-guard`, `-cache`,
-      `-tab`, `-wrapper`, `-attach`, `-adopt`. Consigner le résultat.
+- [ ] Lancer la suite complète, en noms **complets** de sous-commande
+      (`wsh-live.sh` rejette toute abréviation du type `-sep` : message d'usage et
+      code 2) : `selftest-docs`, `selftest-sep`, `selftest-output`,
+      `selftest-live`, `selftest-gc`, `selftest-cache`, `selftest-claim`,
+      `selftest-oneshot-ssh`, `selftest-transfer`, `selftest-guard`,
+      `selftest-tab`, `selftest-wrapper`, `selftest-attach`, `selftest-adopt`.
+      Consigner le résultat.
       `selftest-adopt` instable connu → le dire, ne pas le chasser.
 - [ ] Vérifier qu'aucune session `cockpit-*` ne traîne après la suite (c'est
       l'objet de la fiche 1.1).
