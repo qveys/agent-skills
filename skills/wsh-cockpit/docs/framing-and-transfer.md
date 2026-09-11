@@ -207,6 +207,38 @@ hard-fails the call. **One hop only:** hopping again from that host to a THIRD
 host isn't tracked; it falls back to inline there too, still correct, just not
 optimized.
 
+**Descending one MORE layer — a Docker container.** `docker exec <c> bash`/
+`docker compose exec <c> bash` inside an already-hopped session is a further
+layer the helper file pushed for the layer above (host or Mac) doesn't reach:
+`send`/`banner` keep emitting the short `. '<path>' && __wsh ...` form
+unchanged (framing mode didn't change — the pane just went one process
+deeper), but `<path>` doesn't exist inside the container, so sourcing fails
+("No such file or directory", footer lost — see `docs/gotchas.md`). Falling
+back to inline framing here was considered and rejected: the fix instead is
+to make the SAME path exist one layer down too:
+
+```bash
+scripts/wsh-live.sh remote-init --container <container> "$SESS"
+```
+
+This copies the sep/step helper files (same versioned basenames as always,
+`lib/framing.sh`) into `<container>` at the **exact same absolute path**
+already registered for the session — the directory of whatever
+`remote_helper_path_get "$SESS" sep` currently returns (the host-level
+remote-init/--pre push), or the local `~/.cache/wsh-cockpit/helpers/` dir if
+the pane never left this Mac. Because the path is identical, `send`/`banner`
+need no change at all — no new framing mode, no `remote_mode`/
+`remote_helper_path` flip, this is a file-transfer step only. Transport,
+`docker exec <container> mkdir -p <dir>` then `docker cp` per file, runs
+**hors pane** — on whichever host the pane is actually on (over
+`tailscale ssh` if remote, plain locally if the pane never hopped) — never
+through `send`, same rationale as `push`/`pull`, and it does **not** count
+towards the one-shot SSH warning either. Best-effort like the rest of
+`remote-init`: `docker`/`tailscale` missing, or the container unreachable,
+warns on stderr and returns non-zero — it never hard-fails, but there is
+deliberately no inline fallback for this specific case (see SKILL.md
+"Descendre d'une couche").
+
 **ControlMaster on the hop itself.** For an OpenSSH hop (not `tailscale
 ssh` — see below), send it with multiplexing on:
 
