@@ -1258,6 +1258,9 @@ local-init)
     echo "remote mode OFF for '$SESS' — send/banner back to local helper-file framing"
   fi
   ;;
+selftest-docs)
+  cmd_selftest_docs
+  ;;
 selftest-sep)
   cmd_selftest_sep
   ;;
@@ -1332,7 +1335,7 @@ send)
   # pane, "send" doesn't run a command, it TYPES into whatever's running
   # there — against an interactive foreground (a live CLI REPL, most
   # dangerously another Claude Code session) the text gets SUBMITTED as a
-  # new prompt instead of executing (measured, see docs/gotchas.md); worse,
+  # new prompt instead of executing (measured, see docs/internals.md); worse,
   # since the caller's own shell is still the foreground reader of that
   # pane, the typed text just queues silently until the caller's own
   # process eventually returns control — `step-run`'s wait-done then times
@@ -1582,5 +1585,5 @@ release)
   fi
   ;;
 *)
-  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach} [args]" >&2; exit 2 ;;
+  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach} [args]" >&2; exit 2 ;;
 esac

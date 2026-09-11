@@ -480,7 +480,7 @@ adopt_state_allowed() {  # $1 pane_current_command string -> rc 0 if adoptable
 # pane_current_command only sees the pane's foreground PROCESS — a command
 # being TYPED but not yet run (no Enter pressed) is invisible to it, since
 # the foreground process is still the bare shell. Measured on the machine's
-# real prompt (session tmux jetable, see docs/gotchas.md): a zsh
+# real prompt (session tmux jetable, see docs/internals.md): a zsh
 # powerlevel-style prompt with a right-side segment (RPROMPT) pads the WHOLE
 # line out to the pane width and appends "─"+a corner glyph ("╮"/"╯") flush
 # right, unrelated to whether text was typed — a naive "any content at the
@@ -491,7 +491,7 @@ adopt_state_allowed() {  # $1 pane_current_command string -> rc 0 if adoptable
 # A last line that doesn't match either shape (a different prompt theme, an
 # empty capture, unrelated scrollback content) is UNRECOGNIZED and must NOT
 # refuse adoption: a false positive here would make a healthy cockpit
-# unadoptable, worse than the documented best-effort limit (docs/gotchas.md).
+# unadoptable, worse than the documented best-effort limit (docs/internals.md).
 adopt_last_line_busy() {  # $1 last non-blank captured pane line -> rc 0 if busy (refuse), rc 1 if idle/unrecognized (allow)
   local line="$1" body
   if [[ "$line" =~ ^(.*)[[:space:]]─+[╮╯]$ ]]; then
@@ -989,7 +989,7 @@ teardown_session() {
     # `stop` (wsh-live.sh) hands its raw argument straight to this function
     # with no mux_has check of its own — so $sess can be a bare PREFIX, not
     # the exact session name. `set-option` rejects "=" and resolves by
-    # PREFIX instead (measured — see docs/gotchas.md's I1/I2 gotchas), so
+    # PREFIX instead (measured — see docs/internals.md's I1/I2 gotchas), so
     # unlike the anchored `mux_kill` below, the six set-option calls used to
     # run against whatever session $sess happened to prefix-match — wiping
     # a live NEIGHBOUR's remote-mode options while `mux_kill` correctly (and
