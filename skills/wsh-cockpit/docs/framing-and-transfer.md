@@ -84,7 +84,7 @@ l'écho supplémentaire dérange. Défaut : `WSH_LIVE_SEP=1`.
 ## Lire un résultat sans deviner (`output`, `wait-done --print`)
 
 Les marqueurs `┌─[#N]` / `└─[#N] exit <code>` délimitent chaque `send` de façon
-déterministe — aucun nombre de lignes à devenir :
+déterministe — aucun nombre de lignes à deviner :
 
 ```bash
 scripts/wsh-live.sh send 'seq 1 500' "$SESS"

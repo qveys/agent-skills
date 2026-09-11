@@ -1,4 +1,4 @@
-# Audit trail, diagnostic et vue navigateur
+# Audit trail, backend Zellij, diagnostic et vue navigateur
 
 ## Audit trail
 
@@ -9,6 +9,15 @@ directory with `WSH_LIVE_LOG_DIR=/path`. **⚠️ Audit logs contain everything 
 pane displays — treat them as sensitive** (stored with `chmod 700` on the
 directory and `chmod 600` on each log file). Review periodically if the session
 runs sensitive commands; delete manually with `rm ~/Library/Logs/wsh-cockpit/<session-slug>.log`.
+
+## Backend Zellij (expérimental)
+
+`WSH_MUX=zellij scripts/wsh-live.sh …` : `spawn/start/send/read/wait-done/stop/status/open`, Wave → `zellij attach`.
+
+- Refusé : `keys` (touches tmux), `web` (ttyd = lecture seule ; Zellij a `zellij web`).
+- Audit tmux-only : non journalisé, `UNLOGGED` sur stderr.
+- Ne pas réduire wait-done (rendu headless paresseux).
+- Détails : `docs/internals.md`.
 
 ## Auto-open (`live open`)
 
