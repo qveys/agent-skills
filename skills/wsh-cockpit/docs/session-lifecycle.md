@@ -65,7 +65,7 @@ courte (~100 caractères), jamais le blob inline. Exception à la règle
 COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
 $COCKPIT spawn theo-plan --situate --pre macbook-openclaw
 # → SESSION=cockpit-... puis "pre-push: helpers staged on '...' — remote mode ON"
-$COCKPIT send 'tailscale ssh macbook-openclaw' "$SESS"   # hop interactif : pas de footer exit, exempté de wait-done
+$COCKPIT send 'tailscale ssh macbook-openclaw 2>&1' "$SESS"   # hop interactif : pas de footer exit, exempté de wait-done
 $COCKPIT send 'hostname 2>&1' "$SESS"                   # sonde avec footer : wait-done obligatoire ici
 $COCKPIT wait-done "$SESS" 60
 $COCKPIT send 'docker ps 2>&1' "$SESS"  # déjà en forme courte
