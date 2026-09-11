@@ -34,6 +34,17 @@ Contrainte forte : la sortie brute de la sonde reste nécessaire **en interne**
       final devient `doctor: ok (N checks)` / liste des seuls non-`ok` puis
       `doctor: N check(s) en échec`. En TTY, garder la sortie détaillée (un humain
       la lit).
+- [ ] Ajouter un état **`info`** distinct de `warn` : les états normaux ne sont pas
+      actionnables et ne doivent pas peser dans le plafond. Sont `info` (comptés et
+      masqués en non-TTY, comme les `ok`) : serveur tmux froid (`doctor.sh` écrit
+      déjà « normal si rien n'a encore été spawné »), `state dir` absent,
+      `helper …` absent, `last-session` périmée, `Wave DB` non résolue sans tab,
+      `ttyd`/`zellij` optionnels absents, backend zellij non choisi. Ne restent
+      `warn` que les états qu'un humain doit corriger — sinon le nombre de lignes
+      dépend des outils installés et dépasse 3 sur une machine saine.
+- [ ] Baseline déterministe : le selftest fixe l'environnement qu'il mesure
+      (state dir dédié, serveur tmux froid, `ttyd`/`zellij` non requis) au lieu de
+      compter sur la machine de l'agent.
 - [ ] Sonde : condenser l'impression en une ligne du type
       `situate: host=<h> pwd=<p> user=<u>`. Garder la sortie complète disponible en
       interne pour la détection de hop.
@@ -49,7 +60,10 @@ Contrainte forte : la sortie brute de la sonde reste nécessaire **en interne**
 
 ## Critère done
 
-`doctor` en non-TTY sur une machine saine renvoie ≤ 3 lignes ; `spawn --situate`
+`doctor` en non-TTY renvoie ≤ 3 lignes **sur la baseline contrôlée du selftest** :
+seuls des `warn`/`fail` actionnables sont imprimés, les `ok` **et** les états
+normaux (`info`) sont comptés — le plafond ne dépend donc ni des outils optionnels
+installés ni de la fraîcheur de la machine. `spawn --situate`
 renvoie ≤ 4 lignes en réutilisation et ≤ 5 lignes en création fraîche, incluant les
 3 valeurs de la sonde condensée ; l'adoption reste visiblement sondée. `selftest-adopt`
 (instable connu — consigner, pas chasser), `selftest-live`, `selftest-docs`,
