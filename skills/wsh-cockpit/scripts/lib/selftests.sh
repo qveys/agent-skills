@@ -389,6 +389,7 @@ DOCKERFAKE
 
   # 14a: no remote helper path recorded -> local helpers dir.
   remote_helper_path_clear "$SESS" sep
+  remote_helper_path_clear "$SESS" step
   local local_dir
   local_dir=$(dirname "$(sep_ensure_helpers)")
   set +e
@@ -404,22 +405,32 @@ DOCKERFAKE
     report_live_case "14a container push (local helpers dir)" 1 "rc=$rc log=$(cat "$dlog" 2>/dev/null)"
   fi
 
-  # 14b: a remote helper path IS registered (layer above already ran
-  # remote-init <host>) -> that exact dir is reused, not the local one.
+  # 14b: remote helper paths ARE registered (layer above already ran
+  # remote-init <host>) -> those exact paths are reused, not the local ones.
+  # Deliberately registers basenames that DON'T match the local helpers (what
+  # a stale registration from an older/renamed helper version looks like): the
+  # container copy must recreate the registered names, since that is what the
+  # short `. '<path>' && ...` form send/banner emit actually sources. Both sep
+  # AND step are checked — container_push_helpers copies the two.
   : >"$dlog"
-  remote_helper_path_set "$SESS" sep "/home/fake/.cache/wsh-cockpit/helpers/${sep_b}"
+  local rdir="/home/fake/.cache/wsh-cockpit/helpers"
+  local rsep="wsh-sep-stale.sh" rstep="wsh-step-stale.sh"
+  remote_helper_path_set "$SESS" sep "$rdir/$rsep"
+  remote_helper_path_set "$SESS" step "$rdir/$rstep"
   set +e
   PATH="$dbin:$PATH" container_push_helpers "$SESS" "fake-container"
   rc=$?
   set -e
   if [ "$rc" -eq 0 ] \
-     && grep -Fq "exec fake-container mkdir -p /home/fake/.cache/wsh-cockpit/helpers" "$dlog" \
-     && grep -Fq "cp /home/fake/.cache/wsh-cockpit/helpers/${sep_b} fake-container:/home/fake/.cache/wsh-cockpit/helpers/" "$dlog"; then
+     && grep -Fq "exec fake-container mkdir -p ${rdir}" "$dlog" \
+     && grep -Fq "cp ${rdir}/${rsep} fake-container:${rdir}/" "$dlog" \
+     && grep -Fq "cp ${rdir}/${rstep} fake-container:${rdir}/" "$dlog"; then
     report_live_case "14b container push (registered remote dir)" 0
   else
     report_live_case "14b container push (registered remote dir)" 1 "rc=$rc log=$(cat "$dlog" 2>/dev/null)"
   fi
   remote_helper_path_clear "$SESS" sep
+  remote_helper_path_clear "$SESS" step
 
   # 14c: docker absent -> warn on stderr + fail-soft rc=1, never a hard fail.
   local emptybin err
