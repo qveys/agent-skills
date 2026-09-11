@@ -51,7 +51,10 @@ def _cp(args, returncode=0, stdout="", stderr=""):
     return subprocess.CompletedProcess(args, returncode, stdout=stdout, stderr=stderr)
 
 
-def make_git_side_effect(branch="feature-branch", status="", shas=None, sig="G", apply_ok=True):
+def make_git_side_effect(
+    branch="feature-branch", status="", shas=None, sig="G", apply_ok=True,
+    staged=None, status_rc=0,
+):
     """Build a side_effect function for a mocked `pr_tool._git`, routing on the
     leading positional args the way apply_patch actually calls it, and a
     `state` dict recording push/reset calls for assertions.
@@ -69,11 +72,17 @@ def make_git_side_effect(branch="feature-branch", status="", shas=None, sig="G",
             state["sha_index"] += 1
             return _cp(args, 0, sha + "\n")
         if args[0] == "status" and args[1] == "--porcelain":
-            return _cp(args, 0, status)
+            return _cp(args, status_rc, status, "fatal: not a git repository" if status_rc else "")
+        if args[0] == "diff" and args[1] == "--cached":
+            # `git add -- <files>` stages exactly those paths; `staged`
+            # overrides that to simulate an index dirtied before the run.
+            names = state.get("last_add", []) if staged is None else staged
+            return _cp(args, 0, "\0".join(names))
         if args[0] == "apply":
             return _cp(args, 0 if apply_ok else 1, "", "" if apply_ok else "patch does not apply")
         if args[0] == "add":
             state.setdefault("add_calls", []).append(args)
+            state["last_add"] = [a for a in args[2:]]
             return _cp(args, 0, "")
         if args[0] == "commit":
             return _cp(args, 0, "")
@@ -541,6 +550,108 @@ class TestApplyPatch(unittest.TestCase):
         self.assertIn("Cannot mix", result["error"])
         m_get.assert_not_called()
         m_git.assert_not_called()
+
+    def test_patchless_rejects_pathspecs_and_directories_in_files(self):
+        """`files` is an allowlist, so it must hold exact file paths: a glob, a
+        directory or "." are recursive pathspecs that would stage the user's
+        unrelated work under cover of the allowlist."""
+        with tempfile.TemporaryDirectory() as tmp:
+            os.mkdir(os.path.join(tmp, "src"))
+            for bad in (".", "src", "src/*.py", "/abs/a.py", "../a.py", "./a.py"):
+                with self.subTest(path=bad), \
+                     patch.object(pr_tool, "_http_get") as m_get, \
+                     patch.object(pr_tool, "_git") as m_git:
+                    result = pr_tool.apply_patch(
+                        {
+                            "owner": "o",
+                            "repo": "r",
+                            "prNumber": 1,
+                            "localRepoPath": tmp,
+                            "commits": [{"commitMessage": "fix: x", "files": [bad]}],
+                        }
+                    )
+                    self.assertIn("exact repo-relative file paths", result["error"])
+                    m_get.assert_not_called()
+                    m_git.assert_not_called()
+
+    def test_patchless_refuses_to_commit_an_index_it_does_not_own(self):
+        """`git add -- <files>` does not clear the index: a file staged before
+        the run would ride along into the pushed commit."""
+        with tempfile.TemporaryDirectory() as tmp:
+            git_side_effect, state = make_git_side_effect(
+                branch="feature-branch", status=" M a.py\nM  secrets.env\n",
+                shas=["initial-sha"], staged=["a.py", "secrets.env"],
+            )
+            with patch.object(pr_tool, "_http_get", return_value=_pr_data(branch="feature-branch")), \
+                 patch.object(pr_tool, "_git", side_effect=git_side_effect):
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [{"commitMessage": "fix: x", "files": ["a.py"]}],
+                    }
+                )
+        self.assertIn("secrets.env", result["error"])
+        self.assertEqual(state["push_calls"], [])
+        # rewound with --mixed: the caller's edits stay on disk
+        self.assertEqual([a[1] for a in state["reset_calls"]], ["--mixed"])
+
+    def test_null_patch_is_classified_as_patchless(self):
+        """`_run` reads the patch with `.get("patch")`, so an explicit null is
+        patchless there — the guards must agree, or it slips past them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(pr_tool, "_http_get") as m_get, \
+                 patch.object(pr_tool, "_git") as m_git:
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [{"patch": None, "commitMessage": "fix: x"}],
+                    }
+                )
+        self.assertIn('"files"', result["error"])
+        m_get.assert_not_called()
+        m_git.assert_not_called()
+
+    def test_non_string_patch_is_rejected(self):
+        with patch.object(pr_tool, "_http_get") as m_get, \
+             patch.object(pr_tool, "_git") as m_git:
+            result = pr_tool.apply_patch(
+                {
+                    "owner": "o",
+                    "repo": "r",
+                    "prNumber": 1,
+                    "commits": [{"patch": 42, "commitMessage": "fix: x"}],
+                }
+            )
+        self.assertIn("unified-diff string", result["error"])
+        m_get.assert_not_called()
+        m_git.assert_not_called()
+
+    def test_git_status_failure_aborts_even_in_patchless_mode(self):
+        """Patchless mode skips the clean-tree *check*, not the command: an
+        unreadable working tree means the safety guards cannot be trusted."""
+        with tempfile.TemporaryDirectory() as tmp:
+            git_side_effect, state = make_git_side_effect(
+                branch="feature-branch", shas=["initial-sha"], status_rc=1
+            )
+            with patch.object(pr_tool, "_http_get", return_value=_pr_data(branch="feature-branch")), \
+                 patch.object(pr_tool, "_git", side_effect=git_side_effect):
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [{"commitMessage": "fix: x", "files": ["a.py"]}],
+                    }
+                )
+        self.assertIn("git status failed", result["error"])
+        self.assertEqual(state["push_calls"], [])
 
     def test_patchless_dirty_tree_allowed_and_reset_is_mixed(self):
         """A patchless run needs the tree dirty, and a failure must not delete

@@ -39,8 +39,9 @@ It prints compact JSON to stdout. On any error it prints `{"error": "..."}`
 ## Workflow
 
 **Step 1 — Receive context.** `owner`, `repo`, `prNumber`, plus the path to a
-local checkout of the PR head branch (correct branch, no unrelated uncommitted
-work) — the rest depends on it.
+local checkout **on the PR head branch** — the rest depends on it. Unrelated
+uncommitted work may stay: each commit declares the `files` it owns and only
+those are staged. Nothing is staged from a file you did not declare.
 
 **Step 2 — Fetch comments.** Call `{"kind":"list_pr_comments", ...}`. The output
 is already trimmed to the unresolved root comments — no resolved threads, no

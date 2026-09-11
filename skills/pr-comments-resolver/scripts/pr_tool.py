@@ -417,7 +417,13 @@ def apply_patch(inp: dict) -> dict:
     #     would sweep the user's unrelated work into a pushed commit;
     #   - mixing both styles in one batch would re-introduce that sweep via the
     #     patch entries' `git add -A`, so it is refused.
-    patchless = [c for c in commits_in if "patch" not in c]
+    bad_patch = [c for c in commits_in if c.get("patch") is not None and not isinstance(c["patch"], str)]
+    if bad_patch:
+        return {"error": '"patch" must be a unified-diff string, or absent/null for a patchless commit.'}
+
+    # `_run` reads the patch with `c.get("patch")`, so a null patch is patchless
+    # there; classify it the same way here or it would slip past these guards.
+    patchless = [c for c in commits_in if c.get("patch") is None]
     if patchless:
         if len(patchless) != n:
             return {
@@ -445,6 +451,27 @@ def apply_patch(inp: dict) -> dict:
                         'declare the files it owns as a non-empty "files" list. Without '
                         "it, staging could not tell your edits from the user's unrelated "
                         "uncommitted work."
+                    )
+                }
+            # `git add` takes pathspecs, not paths: ".", "src/", or a glob would
+            # stage the user's unrelated work under cover of the allowlist.
+            invalid = [
+                f
+                for f in files
+                if not f
+                or f.startswith(":")
+                or os.path.isabs(f)
+                or f != os.path.normpath(f)
+                or f.split("/", 1)[0] in (".", "..")
+                or any(ch in f for ch in "*?[]")
+                or os.path.isdir(os.path.join(local_repo_path, f))
+            ]
+            if invalid:
+                return {
+                    "error": (
+                        f'"files" must list exact repo-relative file paths; rejected '
+                        f"{invalid}. Directories, globs and \".\" are recursive pathspecs "
+                        "and would stage more than this commit owns."
                     )
                 }
 
@@ -483,6 +510,27 @@ def apply_patch(inp: dict) -> dict:
             # declared, so unrelated dirt in the user's tree is left alone.
             if patch is None:
                 _git("add", "--", *c["files"], cwd=work_dir)
+                staged = [
+                    f
+                    for f in _git(
+                        "diff", "--cached", "--name-only", "-z", cwd=work_dir
+                    ).stdout.split("\0")
+                    if f
+                ]
+                # Last line of defence: whatever `git add` actually resolved to
+                # (and anything the caller had staged before the run) must be
+                # inside the allowlist, or the commit would carry work it does
+                # not own. Bail out before committing; the caller's edits stay
+                # on disk, the wrapper rewinds with --mixed.
+                unexpected = sorted(set(staged) - {os.path.normpath(f) for f in c["files"]})
+                if unexpected:
+                    return {
+                        "error": (
+                            f"{prefix}staging {c['files']} left unrelated files in the "
+                            f"index ({unexpected}); refusing to commit them. Unstage them "
+                            "(`git restore --staged`) and retry."
+                        )
+                    }
             else:
                 _git("add", "-A", cwd=work_dir)
 
@@ -610,7 +658,11 @@ def apply_patch(inp: dict) -> dict:
         # and stages only the files each commit declared, so this check applies
         # to patch mode only.
         status_r = _git("status", "--porcelain", cwd=local_repo_path, check=False)
-        if not patchless and (status_r.returncode != 0 or status_r.stdout.strip()):
+        if status_r.returncode != 0:
+            # Never skipped, even in patchless mode: the guards below assume a
+            # readable working-tree state.
+            return {"error": _redact(f"git status failed in localRepoPath:\n{status_r.stderr.strip()}")}
+        if not patchless and status_r.stdout.strip():
             return {
                 "error": _redact(
                     "localRepoPath working tree is not clean; commit, stash, or discard "

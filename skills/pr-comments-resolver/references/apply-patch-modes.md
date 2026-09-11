@@ -42,8 +42,12 @@ Three preconditions, each with its own explicit error:
 
 - **`localRepoPath` is required** — a fresh clone has no local edits to commit.
 - **`files` is required on every patchless entry** (non-empty list of paths).
-  Only those paths are staged (`git add -- <files>`, never `git add -A`), so the
-  user's unrelated uncommitted work is not swept into a pushed commit.
+  They must be exact repo-relative file paths — directories, globs and `.` are
+  recursive pathspecs and are rejected. Only those paths are staged
+  (`git add -- <files>`, never `git add -A`), and the index is re-checked after
+  staging: anything outside the list (including something the caller had staged
+  before the run) aborts the commit. Granularity is the file, not the hunk — an
+  unrelated edit *inside* a declared file does get committed.
 - **No mixing** patch and patchless entries in one call: the patch entries stage
   everything and would sweep up the other commits' working-tree edits. Send two
   separate calls.
@@ -60,8 +64,10 @@ never `--hard`: the script must not delete edits it did not produce.
 ```
 
 Preconditions are checked up front, each with its own clear error: the path must
-be a git repo, its **current branch must equal the PR's head branch**, and its
-**working tree must be clean**.
+be a git repo and its **current branch must equal the PR's head branch**. For
+patch entries the **working tree must also be clean**; patchless entries need it
+dirty (that dirt is the payload) and are guarded by the `files` allowlist
+instead.
 
 The user's git config is never touched — an `authorName`/`authorEmail` override,
 if given, is passed per commit via `git -c user.name=... -c user.email=...
@@ -88,8 +94,9 @@ but **never pushes**.
 **Output:** `{ "dryRun": true, "wouldPush": [ { "commitMessage": "...",
 "diffStat": "...", "signed": <bool> }, ... ] }`
 
-In local-repo mode the branch is hard-reset back to its pre-dry-run HEAD before
-returning. In a dry run a signing failure does not abort the operation — it
+In local-repo mode the branch is reset back to its pre-dry-run HEAD before
+returning — `--hard` for patch entries, `--mixed` for patchless ones so the
+caller's edits stay on disk. In a dry run a signing failure does not abort the operation — it
 retries the commit unsigned and reports `signed: false`, since the point of a
 dry run is to diagnose before the real pass.
 
