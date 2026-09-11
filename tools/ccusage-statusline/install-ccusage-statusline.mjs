@@ -682,6 +682,12 @@ function runCcusage(binary, args) {
   return JSON.parse(result.stdout);
 }
 
+function assertSchema(condition, description, sample) {
+  if (condition) return;
+  const keys = sample && typeof sample === "object" ? Object.keys(sample).join(",") : String(sample);
+  throw new Error("unexpected ccusage JSON schema: " + description + " (keys seen: " + keys + ")");
+}
+
 function parseInstant(value) {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -727,15 +733,30 @@ function main() {
   // Include yesterday because a five-hour block can cross local midnight.
   const blocksJson = runCcusage(ccusage, ["blocks", "--json", "--active", "--since", localDay(-1)]);
 
-  const dailyRows = Array.isArray(dailyJson.daily)
-    ? dailyJson.daily.filter(function (row) { return String(row.period || "").slice(0, 10) === day; })
-    : [];
+  // A renamed key would otherwise be indistinguishable from "no usage today":
+  // the producer would cache a confident 0 and the statusline would show it.
+  // Validated against ccusage 20.0.14 (daily[].period/.totalCost,
+  // blocks[].isActive/.startTime/.endTime/.costUSD/.burnRate.costPerHour).
+  assertSchema(Array.isArray(dailyJson.daily), "daily --json has no 'daily' array", dailyJson);
+  assertSchema(
+    !dailyJson.daily.length || dailyJson.daily.some(function (row) { return row && row.period !== undefined; }),
+    "daily --json rows have no 'period' field",
+    dailyJson.daily[0]
+  );
+  const dailyRows = dailyJson.daily
+    .filter(function (row) { return String(row.period || "").slice(0, 10) === day; });
   const aggregateRows = dailyRows.filter(function (row) { return (row.agent || "all") === "all"; });
   const selectedRows = aggregateRows.length ? aggregateRows : dailyRows;
   const dailyTokens = selectedRows.reduce(function (total, row) { return total + tokenTotal(row); }, 0);
   const dailyCost = selectedRows.reduce(function (total, row) { return total + (numeric(row.totalCost) || 0); }, 0);
 
-  const blocks = Array.isArray(blocksJson.blocks) ? blocksJson.blocks : [];
+  assertSchema(Array.isArray(blocksJson.blocks), "blocks --json has no 'blocks' array", blocksJson);
+  const blocks = blocksJson.blocks;
+  assertSchema(
+    !blocks.length || blocks.some(function (block) { return block && block.isActive !== undefined; }),
+    "blocks --json rows have no 'isActive' field",
+    blocks[0]
+  );
   const current = blocks.find(function (block) { return block && block.isActive === true; }) || null;
   let block = { active: false, cost_usd: null, ends_at: null, ends_at_epoch: null, burn_rate_usd_per_hour: null };
   if (current) {
