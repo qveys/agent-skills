@@ -982,12 +982,14 @@ function resolveExistingCcusage(homeDirectory) {
         path.join(process.env.APPDATA || path.join(homeDirectory, "AppData", "Roaming"), "npm", "ccusage.cmd"),
         path.join(homeDirectory, ".local", "bin", "ccusage.cmd"),
         path.join(homeDirectory, ".bun", "bin", "ccusage.exe"),
+        path.join(homeDirectory, ".local", "share", "ccusage", "node_modules", ".bin", "ccusage.cmd"),
       ]
     : [
         "/opt/homebrew/bin/ccusage",
         path.join(homeDirectory, ".local", "bin", "ccusage"),
         "/usr/local/bin/ccusage",
         path.join(homeDirectory, ".bun", "bin", "ccusage"),
+        path.join(homeDirectory, ".local", "share", "ccusage", "node_modules", ".bin", "ccusage"),
       ];
   return candidates.find(isExecutable) || null;
 }
