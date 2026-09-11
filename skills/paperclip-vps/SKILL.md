@@ -5,7 +5,7 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
 
 # Paperclip on vps-openclaw — direct routes (validated 2026-07-04)
 
-Connect with `tailscale ssh vps-openclaw` (or `ssh vps-openclaw` when the host key is already pinned). Then work in Container `paperclip-paperclip-1`.
+Connect with `tailscale ssh vps-openclaw` (or `ssh vps-openclaw` when the host key is already pinned). Then resolve the live container with `docker ps --format '{{.Names}}'` before inspecting or patching anything: `paperclip-paperclip-1` is the known default, but other instances run under other names (see Disk space below).
 
 ## Topology
 - Host: `vps-openclaw` (tailnet `100.100.10.60`, hostname srv1453980). SSH: `ssh vps-openclaw` (host key already pinned in `known_hosts`; on a fresh machine, verify the host fingerprint out-of-band — provider console or `tailscale ssh` — before first connect; do NOT default to `accept-new`, it trusts whatever key a first-connection MITM presents).

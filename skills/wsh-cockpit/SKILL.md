@@ -167,7 +167,10 @@ last-session state under `~/.cache/wsh-cockpit/`.
 
 ### Cockpit pré-ouvert par l'utilisateur — wrapper `claude-cockpit` et adoption
 
-Si l'utilisateur nomme un cockpit (exemple : `cockpit-omniroute-171628`), adopte et utilise cette session. N'en crée pas une seconde.
+Si l'utilisateur nomme un cockpit (exemple : `cockpit-omniroute-171628`), reprends ce préfixe
+dans ton `spawn` : si la session est offerte via `WSH_COCKPIT_ADOPT` et que la sonde réussit,
+utilise-la — n'en crée pas une seconde. Si aucune session adoptable ne correspond (nom périmé,
+session absente), le `spawn` crée un cockpit neuf, comme documenté plus bas.
 
 L'utilisateur peut pré-ouvrir un ou plusieurs cockpits **avant même de te lancer**,
 via le wrapper `claude-cockpit` (`scripts/claude-cockpit.sh`, symlinké en
