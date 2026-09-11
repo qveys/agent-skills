@@ -1,6 +1,7 @@
 ---
 name: omniroute-ops
-description: Operate OmniRoute (Task Router, combos, IP whitelist, cache/cost, real vs virtual models) from what is actually installed, preferring the admin UI over source changes. Use when the user mentions OmniRoute, Task Router, `omniroute connect` / `models list`, vps-dokploy OmniRoute, or says "Ne fais aucune supposition : base-toi uniquement sur ce qui est réellement installé sur ce serveur" or wants to configure a feature in the interface without modifying source.
+description: >-
+  Operate OmniRoute (Task Router, combos, IP whitelist, cache/cost, real vs virtual models) from what is actually installed, preferring the admin UI over source changes. Use when the user mentions OmniRoute, Task Router, `omniroute connect` / `models list`, vps-dokploy OmniRoute, or says "Ne fais aucune supposition : base-toi uniquement sur ce qui est réellement installé sur ce serveur" or wants to configure a feature in the interface without modifying source.
 user-invocable: true
 ---
 
