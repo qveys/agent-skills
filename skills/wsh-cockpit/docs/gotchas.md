@@ -119,7 +119,7 @@ footer shows exit 0 *and* probe is ok. Prefer **one chained cockpit command**
 # Option A — helper on remote (deploy via wsh-push.sh):
 $COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' cockpit-theo-plan-225108
 # Option B — inline wait loop in a single send:
-$COCKPIT send '{ openclaw gateway restart; EL=0; while [ $EL -lt 60 ]; do sleep 3; EL=$((EL+3)); openclaw gateway status 2>&1 | grep -q "Connectivity probe: ok" && echo READY:$EL && break; echo waiting:$EL; done; openclaw gateway status 2>&1 | head -12; } 2>&1'
+$COCKPIT send '{ R=1; openclaw gateway restart && { EL=0; while [ $EL -lt 60 ]; do sleep 3; EL=$((EL+3)); if openclaw gateway status 2>&1 | grep -q "Connectivity probe: ok"; then echo READY:$EL; R=0; break; fi; echo waiting:$EL; done; }; openclaw gateway status 2>&1 | head -12; [ "$R" -eq 0 ]; } 2>&1'
 ```
 Only after `Connectivity probe: ok` → send the next step (`infer`, `agent`,
 etc.). OpenClaw also supports `openclaw gateway restart --wait 45s` when run
