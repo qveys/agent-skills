@@ -34,40 +34,18 @@ $COCKPIT banner step   2.1 "TOOLS.md"
 # ...
 ```
 
-`banner` **source la fonction `__wsh_banner` une seule fois par session** (helper
-`~/.cache/wsh-cockpit/helpers/wsh-live-step-vN.sh`, suivi via une option tmux — même mécanisme que le framing
-`send`), puis chaque bannière suivante n'est qu'un **appel court et lisible** :
-`__wsh_banner done 'msg'`. Fini le pavé `printf` de ~700 caractères tapé dans le
-pane à chaque fois — l'utilisateur voit défiler la commande courte, pas le splat.
-Pas de framing `send` autour (la bannière EST le séparateur visuel).
+`banner` applique le même mécanisme de helper versionné sourcé une fois par
+session que le framing `send` (voir `docs/framing-and-transfer.md` → "Command
+framing") : `__wsh_banner` (helper `~/.cache/wsh-cockpit/helpers/wsh-live-step-vN.sh`)
+une fois, puis chaque bannière suivante n'est qu'un **appel court et lisible** :
+`__wsh_banner done 'msg'` — fini le pavé `printf` de ~700 caractères retapé à
+chaque fois. Pas de framing `send` autour (la bannière EST le séparateur visuel).
 
 Si le pane a fait un `ssh` / `wsh ssh` vers un hôte **sans** le helper local, la
 fonction sourcée n'existe plus là-bas : pose `WSH_STEP_INLINE=1` pour retomber sur
 le one-liner autonome (`wsh-step.sh cmd …`), qui marche partout sans rien sourcer.
 
-## Rendu attendu
-
-Dans Wave (couleurs quand le pane est un TTY — dégradé en texte plain sur pipe /
-non-TTY) :
-
-```
-┌────────────────────────────────────────────────────────────────────────┐   ← cyan dim
-│                         PHASE 1 / 6                                    │   ← cyan bold
-│                      Fondations & isolation                            │   ← blanc
-└────────────────────────────────────────────────────────────────────────┘
-
-
-
-────────────────────────────────────────────────────────────────────────   ← jaune dim
-  ▸  [1.1]  openclaw doctor                                               ← jaune / blanc
-────────────────────────────────────────────────────────────────────────
-```
-
-Palette par type de bannière (256 couleurs saturées — percutant dans Wave) :
-- **`header`** — bordures **turquoise**, titre **magenta hot**, session bleu ciel.
-- **`phase`** — bordures **turquoise**, `PHASE N / T` **cyan électrique**, sous-titre blanc intense.
-- **`step`** — bordures **jaune vif**, `▸ [id]` **orange**, libellé blanc intense.
-- **`done`** — bordures **vert néon**, `✓ message` **vert lime**.
+Rendu attendu et palette : `docs/internals.md`.
 
 ## Règles
 
@@ -81,12 +59,6 @@ Palette par type de bannière (256 couleurs saturées — percutant dans Wave) :
 - Prévisualiser localement si besoin : `scripts/wsh-step.sh phase 1 6 "titre"`.
 - Sorties longues : garde les bannières **en dehors** des pipes (`| head`, etc.).
 
-Checklist avant chaque phase :
-1. `banner phase`
-2. `banner step` → `send` (commande)
-3. `banner step` → `send` (commande suivante)
-4. `banner done`
-
 ## Raccourci `step-run`
 
 `step-run "<id>" "<label>" "<commande>" [session]` combine bannière + `send` +
@@ -95,9 +67,3 @@ Checklist avant chaque phase :
 appel**, au lieu d'enchaîner 3 appels séparés pour chaque étape. Rend le même
 résultat visuel dans Wave ; à utiliser à la place de `banner step` + `send` +
 `wait-done` quand l'étape n'a qu'une seule commande.
-
-> **Mainteneur :** le rendu a une seule source de layout (`__wsh_banner` dans
-> `wsh-step.sh defs`) ; le live `banner` et le preview direct l'utilisent, seul le
-> fallback `WSH_STEP_INLINE=1` répète la mise en page en `printf` plat. Après toute
-> retouche du rendu, lance `scripts/wsh-step.sh selftest-step` (garde
-> `direct ≡ cmd ≡ defs`, bash+zsh, couleurs forcées).

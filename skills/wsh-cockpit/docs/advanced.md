@@ -1,4 +1,4 @@
-# Audit trail, backend Zellij, diagnostic et vue navigateur
+# Audit trail, diagnostic et vue navigateur
 
 ## Audit trail
 
@@ -9,27 +9,6 @@ directory with `WSH_LIVE_LOG_DIR=/path`. **⚠️ Audit logs contain everything 
 pane displays — treat them as sensitive** (stored with `chmod 700` on the
 directory and `chmod 600` on each log file). Review periodically if the session
 runs sensitive commands; delete manually with `rm ~/Library/Logs/wsh-cockpit/<session-slug>.log`.
-
-## Backend Zellij (expérimental)
-
-`WSH_MUX=zellij scripts/wsh-live.sh …` pilote une session **Zellij** au lieu de
-tmux, avec le même cœur de boucle : `spawn`/`start`/`send`/`read`/`wait-done`/
-`stop`/`status`/`open` (le bloc Wave exécute alors `zellij attach`). Détails :
-
-- Une session Zellij background n'a **pas de pane** tant qu'un `run` n'en crée
-  pas un ; le script le fait et mémorise le pane-id (`~/.cache/wsh-cockpit/pane-*`),
-  car les actions Zellij headless doivent cibler le pane explicitement.
-- Restent **tmux-only** avec refus explicite : `keys` (noms de touches tmux) et
-  `web` (ttyd a besoin de l'attach lecture seule ; Zellij a son propre
-  `zellij web`). Le journal d'audit (`pipe-pane`) est aussi tmux-only, mais ne
-  bloque pas la session : elle démarre quand même, non journalisée, avec un
-  avertissement explicite sur stderr (`UNLOGGED`) plutôt qu'un refus silencieux.
-- Le framing `send` re-source le helper à chaque appel (pas de store d'options
-  par session côté Zellij) : ligne visible un peu plus longue, comportement sûr.
-- Gate de non-régression : `WSH_MUX=zellij scripts/wsh-live.sh selftest-live`
-  doit passer, comme la version tmux, après toute retouche du cœur live.
-- Le rendu headless Zellij peut être paresseux au premier write : `wait-done`
-  (polling adaptatif) l'absorbe ; ne pas réduire ses timeouts sous zellij.
 
 ## Auto-open (`live open`)
 
