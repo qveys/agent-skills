@@ -3,53 +3,37 @@
 ## Audit trail
 
 **`live` mode only.** Every tmux session auto-logs everything displayed in the pane
-to `~/Library/Logs/wsh-cockpit/<session-slug>.log`. The log file name is a sanitized slug of the session name (characters outside `[A-Za-z0-9_.-]` replaced with `_`), so the path remains safe for shell interpolation. Logs are **retained for 30 days**
-then auto-purged. Disable logging with `WSH_LIVE_LOG=0`; customize the log
-directory with `WSH_LIVE_LOG_DIR=/path`. **⚠️ Audit logs contain everything the
-pane displays — treat them as sensitive** (stored with `chmod 700` on the
-directory and `chmod 600` on each log file). Review periodically if the session
-runs sensitive commands; delete manually with `rm ~/Library/Logs/wsh-cockpit/<session-slug>.log`.
+to `~/Library/Logs/wsh-cockpit/<session-slug>.log` (sanitized slug of session name).
+Logs are **retained for 30 days** then auto-purged. Disable logging with
+`WSH_LIVE_LOG=0`; customize directory with `WSH_LIVE_LOG_DIR=/path`. **⚠️ Audit
+logs contain everything displayed — treat them as sensitive** (directory `chmod 700`,
+files `chmod 600`). Delete manually with
+`rm ~/Library/Logs/wsh-cockpit/<session-slug>.log`.
 
 ## Backend Zellij (expérimental)
 
-`WSH_MUX=zellij scripts/wsh-live.sh …` pilote une session **Zellij** au lieu de
-tmux, avec le même cœur de boucle : `spawn`/`start`/`send`/`read`/`wait-done`/
-`stop`/`status`/`open` (le bloc Wave exécute alors `zellij attach`). Détails :
+`WSH_MUX=zellij scripts/wsh-live.sh …` : `spawn/start/send/read/wait-done/stop/status/open`, Wave → `zellij attach`.
+Commandes également disponibles : `banner`, `step-run`, `output`, `push`, `pull`, `remote-init`, `local-init`, `doctor`.
 
-- Une session Zellij background n'a **pas de pane** tant qu'un `run` n'en crée
-  pas un ; le script le fait et mémorise le pane-id (`~/.cache/wsh-cockpit/pane-*`),
-  car les actions Zellij headless doivent cibler le pane explicitement.
-- Restent **tmux-only** avec refus explicite : `keys` (noms de touches tmux) et
-  `web` (ttyd a besoin de l'attach lecture seule ; Zellij a son propre
-  `zellij web`). Le journal d'audit (`pipe-pane`) est aussi tmux-only, mais ne
-  bloque pas la session : elle démarre quand même, non journalisée, avec un
-  avertissement explicite sur stderr (`UNLOGGED`) plutôt qu'un refus silencieux.
-- Le framing `send` re-source le helper à chaque appel (pas de store d'options
-  par session côté Zellij) : ligne visible un peu plus longue, comportement sûr.
-- Gate de non-régression : `WSH_MUX=zellij scripts/wsh-live.sh selftest-live`
-  doit passer, comme la version tmux, après toute retouche du cœur live.
-- Le rendu headless Zellij peut être paresseux au premier write : `wait-done`
-  (polling adaptatif) l'absorbe ; ne pas réduire ses timeouts sous zellij.
+- `remote-init` / `local-init` : ne persistent pas le mode distant sticky (Zellij n'a pas de store d'options par session ; passer par `WSH_LIVE_SEP_REINIT=1` / `WSH_STEP_INLINE=1`).
+- `gc` : exécute l'hygiène des marqueurs, saute le balayage des sessions idle (spécifique tmux) et retourne 0.
+- Refusé (code 13) : `keys` (touches tmux), `web` (ttyd = lecture seule ; Zellij a `zellij web`).
+- Audit tmux-only : non journalisé, `UNLOGGED` sur stderr.
+- Ne pas réduire wait-done (rendu headless paresseux).
+- Détails : `docs/internals.md`.
 
 ## Auto-open (`live open`)
 
-`open` already handles every Wave-internals edge case for you — stale
-`WAVETERM_TABID`, the WAL-aware `?mode=ro` read of the live active tab, the
-absolute-path `tmux` exec (Wave blocks lack the homebrew PATH), and the
-attach-landed check with a manual-`tmux attach` fallback. You don't run any of
-this by hand; just call `scripts/wsh-live.sh open <session>`. (Implementation:
-`resolve_live_tab` / `tab_describe` in the script — touch those if Wave changes.)
+`open` gère les cas particuliers de Wave (stale `WAVETERM_TABID`, lecture WAL `?mode=ro`
+de l'onglet actif, chemin absolu `tmux`, vérification d'attache avec repli manuel).
+Appeler simplement `scripts/wsh-live.sh open <session>`.
 
-**Le bloc s'ouvre sur l'onglet du shell INITIATEUR** (celui où tourne le Claude
-Code qui a lancé `spawn`/`open`), pas sur l'onglet « actif » de la DB : la
-résolution privilégie les signaux vivants — nom de session tmux `wave-<tab8>`
-du wrapping wave-init, puis onglet contenant `WAVETERM_BLOCKID` — car l'env
-`WAVETERM_TABID` peut être périmé tout en existant encore en DB (fenêtre tmux
-qui survit au bloc qui l'a créée).
+**Le bloc s'ouvre sur l'onglet du shell INITIATEUR** (où tourne le Claude Code
+émetteur), pas sur l'onglet « actif » DB : signaux vivants privilégiés — nom tmux
+`wave-<tab8>`, puis onglet contenant `WAVETERM_BLOCKID`.
 
-The one thing that's on **you**: when `open` reports the cockpit is on tab «T4»
-(it prints this when >1 tab exists, because no wsh command can move the UI focus),
-**relay that tab name to the user** — never just say "it's open."
+Si `open` signale l'onglet (ex. «T4», quand >1 onglet existe), **communique ce nom
+à l'utilisateur** — ne pas se contenter d'un « c'est ouvert ».
 
 ## `doctor` — diagnostiquer le cockpit
 
@@ -78,23 +62,14 @@ scripts/wsh-live.sh web status cockpit-theo-plan-225108   # running/stopped + UR
 scripts/wsh-live.sh web stop   cockpit-theo-plan-225108   # kill + supprime le pidfile
 ```
 
-- **Lecture seule par défaut.** `ttyd` tourne sans `-W` et le client tmux
-  s'attache avec `attach -r` (client read-only) : quiconque ouvre l'URL peut
-  **regarder mais pas taper**. `WSH_WEB_WRITE=1 scripts/wsh-live.sh web start
-  <session>` bascule les deux à la fois (`-W` sur ttyd, `attach` sans `-r`) —
-  n'importe qui avec l'URL peut alors **piloter** la session, à activer
-  uniquement en connaissance de cause.
+- **Lecture seule par défaut.** `ttyd` tourne sans `-W` et tmux en `attach -r`
+  (lecture seule). `WSH_WEB_WRITE=1 scripts/wsh-live.sh web start <session>`
+  active l'écriture (`-W` et sans `-r`) pour piloter depuis le web.
 - **Port** : `WSH_WEB_PORT` (défaut `7681`).
-- **Sécurité — bind loopback strict.** `ttyd` n'écoute que sur `127.0.0.1` : il
-  n'est **jamais** exposé directement sur le réseau. Le flux montre **tout ce
-  que montre le pane** (mêmes garde-fous que l'audit trail — traiter comme
-  sensible). Pour un accès depuis le tailnet, utiliser **uniquement**
-  `tailscale serve --bg <port>` (proxy HTTPS tailnet → `127.0.0.1:<port>`,
-  arrêt avec `tailscale serve reset`) — **jamais `tailscale funnel`**, qui
-  exposerait le pane sur l'internet public.
-- `web start` est idempotent : un pid déjà vivant pour la session → message +
-  rc 0 (pas de doublon). Après le lancement, le script vérifie que ttyd répond
-  (`curl` sur `http://127.0.0.1:<port>` → `200`, jusqu'à 3s) ; sinon rc 1 et le
-  pidfile est nettoyé.
+- **Sécurité — bind loopback strict.** `ttyd` écoute sur `127.0.0.1` (traiter comme
+  sensible). Accès distant via **uniquement** `tailscale serve --bg <port>` (arrêt :
+  `tailscale serve reset`) — **jamais `tailscale funnel`** (internet public).
+- `web start` est idempotent (message + rc 0 si déjà lancé) et vérifie la réponse
+  (`curl` sur le port → `200`, jusqu'à 3s ; sinon rc 1 et nettoyage du pidfile).
 - `doctor` signale la présence/absence de `ttyd` (extra optionnel, requis
   uniquement par `web`).

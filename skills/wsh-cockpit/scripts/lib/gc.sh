@@ -24,7 +24,7 @@ gc_should_kill() {
   # know or care whether the session being evaluated is the one the sweep
   # itself is running inside. Measured, before Task 1 (lot 2): `gc --idle=0`
   # run from inside a detached cockpit-* session killed that session out
-  # from under itself (see docs/gotchas.md history). The own-session guard
+  # from under itself (see docs/internals.md history). The own-session guard
   # now lives in cmd_gc below, not here: a probe before the loop refuses
   # the WHOLE sweep outright when identity is indeterminable ($TMUX set,
   # $TMUX_PANE unset), and a per-candidate session_is_own check inside the
@@ -309,7 +309,7 @@ cmd_gc() {
   # name, so it would be identical for every candidate in the loop. A REAL
   # sweep that cannot verify its own identity refuses outright — this is
   # exactly the state that used to let `gc --idle=0` kill its own detached
-  # session (docs/gotchas.md). --dry-run never destroys anything regardless
+  # session (docs/internals.md). --dry-run never destroys anything regardless
   # of identity, so it skips this probe and keeps listing normally — the
   # per-candidate check further down still runs for it, it just can't
   # distinguish rc=1 from rc=2 there, which is harmless since dry-run only
