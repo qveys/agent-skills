@@ -86,7 +86,8 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
 - **Still unexplained**: *what* strips the symbol. No module under `node_modules` reassigns `execFile` or touches `promisify.custom`; plugins never reference `child_process`. Outside the server process — same container, same uid, CJS and ESM, with and without the tsx loader — the symbol is present (`custom=function`). Treat any new `promisify(<node callback API>)` in this codebase as suspect.
 - **Debugging recipe that worked**: poll the workspace at 1 Hz while grepping the logs for the failure timestamp. Seeing the workspace healthy at the exact second the server declares it broken is what rules out the filesystem and points at the probe.
 - Compounding issue: the recovery route `POST /api/issues/:id/recovery-actions/resolve` answers **404** (8 of 19 calls, plus 5× 400), so agents cannot close their own recovery loop — hence duplicated worktrees (`pr-audit-merge-order` ×4, `auto-assign-unassigned-issues` ×3).
-- An agent left in `status=error` is never retried on its own: it needs `agent resume` (board key required).
+- Agent `status` does move on its own (CEO and Product Owner went `error` → `idle` unaided on 2026-09-10), but not reliably — several stayed stuck for 9 days. If one is still `error` after the underlying cause is fixed, `agent resume` (board key required) is the lever.
+- **Fix verified end-to-end 2026-09-10 15:02 UTC**: zero `WorkspaceValidationFailure` after the rebuild, and the My-Housekeeper CEO (`0b44e4bd…`) started its first run since 2026-09-01, passing workspace validation on worktree `MYH-88-…`. VPS commit `f6314abc0`.
 
 ## Removed boot steps (2026-09-10)
 - `47-register-qveys-agent-router-adapter.sh` + `58-qveys-agent-router.bg.sh` (commit `21e237fb4`) — OmniRoute router leftover; re-registered its adapter into `/app/data/adapter-plugins.json` on every boot and started `router.mjs` on 127.0.0.1:3188.
