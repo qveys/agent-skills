@@ -149,6 +149,18 @@ def _gql(query: str, variables: dict) -> dict:
     return data["data"]
 
 
+def _head_lines(text: str, n: int = 15) -> str:
+    """Keep the first `n` lines of `text`, flagging how many were dropped.
+
+    git's failure output is unbounded and lands verbatim in the caller's
+    context; the first few lines carry the diagnosis, the rest is padding.
+    """
+    lines = text.strip().splitlines()
+    if len(lines) <= n:
+        return "\n".join(lines)
+    return "\n".join(lines[:n]) + f"\n... ({len(lines) - n} more lines)"
+
+
 def _git(*args: str, cwd: str, check: bool = True) -> subprocess.CompletedProcess:
     result = subprocess.run(
         ["git", *args],
@@ -165,18 +177,70 @@ def _git(*args: str, cwd: str, check: bool = True) -> subprocess.CompletedProces
     return result
 
 
+def _apply(patch: str, work_dir: str, prefix: str = "") -> dict | None:
+    """Apply a unified diff to `work_dir`. Returns None on success, an error dict otherwise.
+
+    LLM-generated diffs often have slightly stale context, so a failed direct
+    apply is retried with `--3way`, which can reconstruct a fake ancestor from
+    the blobs referenced by the patch's index lines and merge around the drift.
+    That needs those index lines to be present and resolvable in our shallow
+    clone; when they're missing (common in LLM-generated diffs), --3way fails
+    with something like "could not build fake ancestor" and we report both.
+    """
+    # Write the patch to a temp file OUTSIDE the working tree, so the later
+    # `git add -A` can never stage the patch file itself into the commit.
+    # Unlink is guaranteed even if applying raises.
+    patch_fd, patch_path = tempfile.mkstemp(suffix=".patch", prefix="pr_resolver_")
+    with os.fdopen(patch_fd, "w", encoding="utf-8") as f:
+        f.write(patch)
+    try:
+        direct = _git("apply", "--whitespace=fix", patch_path, cwd=work_dir, check=False)
+        if direct.returncode == 0:
+            return None
+        three_way = _git(
+            "apply", "--3way", "--whitespace=fix", patch_path, cwd=work_dir, check=False
+        )
+        if three_way.returncode == 0:
+            return None
+        return {
+            "error": _redact(
+                f"{prefix}git apply failed (direct):\n{_head_lines(direct.stderr)}\n\n"
+                f"stdout:\n{_head_lines(direct.stdout)}\n\n"
+                f"git apply --3way also failed:\n{_head_lines(three_way.stderr)}\n\n"
+                f"stdout:\n{_head_lines(three_way.stdout)}"
+            )
+        }
+    finally:
+        os.unlink(patch_path)
+
+
 # ---------------------------------------------------------------------------
 # Operations
 # ---------------------------------------------------------------------------
 
 def list_pr_comments(inp: dict) -> dict:
     """
-    Fetch all inline review comments for a PR, enriched with GraphQL thread metadata.
+    Fetch the inline review comments for a PR, enriched with GraphQL thread metadata.
+
+    The output is trimmed by default to what the resolve workflow actually acts
+    on: unresolved root comments, without diff hunks. The untrimmed payload is
+    expensive — on a 42-comment PR it runs to ~268 KB, ~70% of it diff hunks —
+    and the workflow used to discard most of it after paying for it. Each
+    exclusion has an opt-out:
+
+      - {"includeResolved": true} → keep comments on resolved threads
+      - {"includeReplies": true}  → keep replies (inReplyToId != null)
+      - {"hunkLines": N}          → include the last N lines of each diffHunk;
+                                    0 (the default) omits the field entirely
+
     Returns: { "comments": [...] }
     """
     owner = inp["owner"]
     repo = inp["repo"]
     pr_number = int(inp["prNumber"])
+    include_resolved = bool(inp.get("includeResolved", False))
+    include_replies = bool(inp.get("includeReplies", False))
+    hunk_lines = int(inp.get("hunkLines", 0))
 
     # --- REST: inline review comments ---
     rest_comments = _paginate(
@@ -239,24 +303,32 @@ def list_pr_comments(inp: dict) -> dict:
     for c in rest_comments:
         cid: int = c["id"]
         in_reply_to: int | None = c.get("in_reply_to_id")
+        if in_reply_to is not None and not include_replies:
+            continue
+
         root_id: int = cid if in_reply_to is None else in_reply_to
         meta = thread_map.get(root_id, {})
+        is_resolved: bool = meta.get("isResolved", False)
+        if is_resolved and not include_resolved:
+            continue
 
-        comments_out.append(
-            {
-                "id": cid,
-                "threadId": meta.get("threadId"),
-                "isResolved": meta.get("isResolved", False),
-                "path": c.get("path", ""),
-                "line": c.get("line") or c.get("original_line"),
-                "position": c.get("position"),
-                "body": c["body"],
-                "inReplyToId": in_reply_to,
-                "user": c["user"]["login"],
-                "createdAt": c["created_at"],
-                "diffHunk": c.get("diff_hunk", ""),
-            }
-        )
+        out: dict = {
+            "id": cid,
+            "threadId": meta.get("threadId"),
+            "isResolved": is_resolved,
+            "path": c.get("path", ""),
+            "line": c.get("line") or c.get("original_line"),
+            "position": c.get("position"),
+            "body": c["body"],
+            "inReplyToId": in_reply_to,
+            "user": c["user"]["login"],
+            "createdAt": c["created_at"],
+        }
+        if hunk_lines > 0:
+            out["diffHunk"] = "\n".join(
+                c.get("diff_hunk", "").splitlines()[-hunk_lines:]
+            )
+        comments_out.append(out)
 
     return {"comments": comments_out}
 
@@ -336,6 +408,46 @@ def apply_patch(inp: dict) -> dict:
     local_repo_path: str | None = inp.get("localRepoPath")
     dry_run: bool = bool(inp.get("dryRun", False))
 
+    # A commit entry without "patch" means "commit the edits already sitting in
+    # the working tree". That inverts two assumptions of the patch flow, so it
+    # comes with its own preconditions:
+    #   - it needs a tree the caller has edited → local-repo mode only;
+    #   - the tree is dirty by construction → the clean-tree check is skipped,
+    #     so the entry must declare which files it owns, otherwise `git add -A`
+    #     would sweep the user's unrelated work into a pushed commit;
+    #   - mixing both styles in one batch would re-introduce that sweep via the
+    #     patch entries' `git add -A`, so it is refused.
+    patchless = [c for c in commits_in if "patch" not in c]
+    if patchless:
+        if len(patchless) != n:
+            return {
+                "error": (
+                    'Cannot mix commits with and without "patch" in one call: the '
+                    'patch entries stage everything (`git add -A`) and would sweep '
+                    "up the working-tree edits meant for the other commits. Send "
+                    "them as two separate calls."
+                )
+            }
+        if not local_repo_path:
+            return {
+                "error": (
+                    'A commit entry without a "patch" means "commit what is already '
+                    'in the working tree", which requires "localRepoPath". In clone '
+                    "mode the fresh clone has no local edits to commit."
+                )
+            }
+        for c in patchless:
+            files = c.get("files")
+            if not isinstance(files, list) or not files or not all(isinstance(f, str) for f in files):
+                return {
+                    "error": (
+                        f'Commit "{c.get("commitMessage", "")}" has no "patch", so it must '
+                        'declare the files it owns as a non-empty "files" list. Without '
+                        "it, staging could not tell your edits from the user's unrelated "
+                        "uncommitted work."
+                    )
+                }
+
     # --- Resolve PR head branch ---
     pr_data = _http_get(f"{BASE}/repos/{owner}/{repo}/pulls/{pr_number}")
     head_branch: str = pr_data["head"]["ref"]
@@ -356,44 +468,23 @@ def apply_patch(inp: dict) -> dict:
         commit_shas: list[str] = []
         would_push: list[dict] = []
         for idx, c in enumerate(commits_in, start=1):
-            patch: str = c["patch"]
+            patch: str | None = c.get("patch")
             commit_message: str = c["commitMessage"]
             prefix = f'commit {idx}/{n} ("{commit_message}") failed: ' if n > 1 else ""
 
-            # Write the patch to a temp file OUTSIDE the working tree, so the
-            # later `git add -A` can never stage the patch file itself into
-            # the commit. Unlink is guaranteed even if applying raises.
-            patch_fd, patch_path = tempfile.mkstemp(suffix=".patch", prefix="pr_resolver_")
-            with os.fdopen(patch_fd, "w", encoding="utf-8") as f:
-                f.write(patch)
-            try:
-                # Apply patch. LLM-generated diffs often have slightly stale
-                # context, so on failure we retry with `--3way`, which can
-                # reconstruct a fake ancestor from the blobs referenced by the
-                # patch's index lines and merge around the drift. This still
-                # needs those index lines to be present and resolvable in our
-                # shallow clone; when they're missing (common in LLM-generated
-                # diffs), --3way fails with something like "could not build
-                # fake ancestor" and we fall through to the error.
-                apply_r = _git("apply", "--whitespace=fix", patch_path, cwd=work_dir, check=False)
-                if apply_r.returncode != 0:
-                    apply_3way_r = _git(
-                        "apply", "--3way", "--whitespace=fix", patch_path, cwd=work_dir, check=False
-                    )
-                    if apply_3way_r.returncode != 0:
-                        return {
-                            "error": _redact(
-                                f"{prefix}git apply failed (direct):\n{apply_r.stderr.strip()}\n\n"
-                                f"stdout:\n{apply_r.stdout.strip()}\n\n"
-                                f"git apply --3way also failed:\n{apply_3way_r.stderr.strip()}\n\n"
-                                f"stdout:\n{apply_3way_r.stdout.strip()}"
-                            )
-                        }
-            finally:
-                os.unlink(patch_path)
-
-            # Stage all changes
-            _git("add", "-A", cwd=work_dir)
+            # No patch → the caller already edited the working tree directly
+            # (cheaper and more reliable than round-tripping a unified diff),
+            # so there is nothing to apply: go straight to staging.
+            if patch is not None:
+                _apply_or_fail = _apply(patch, work_dir, prefix)
+                if _apply_or_fail is not None:
+                    return _apply_or_fail
+            # Stage the changes. In patchless mode only the files this commit
+            # declared, so unrelated dirt in the user's tree is left alone.
+            if patch is None:
+                _git("add", "--", *c["files"], cwd=work_dir)
+            else:
+                _git("add", "-A", cwd=work_dir)
 
             # Commit (signed). `-S` forces signing so a failing/locked signer
             # aborts the commit instead of silently producing an unsigned one.
@@ -515,8 +606,11 @@ def apply_patch(inp: dict) -> dict:
                 )
             }
 
+        # A patchless run needs the tree dirty — that dirt is the payload —
+        # and stages only the files each commit declared, so this check applies
+        # to patch mode only.
         status_r = _git("status", "--porcelain", cwd=local_repo_path, check=False)
-        if status_r.returncode != 0 or status_r.stdout.strip():
+        if not patchless and (status_r.returncode != 0 or status_r.stdout.strip()):
             return {
                 "error": _redact(
                     "localRepoPath working tree is not clean; commit, stash, or discard "
@@ -530,26 +624,33 @@ def apply_patch(inp: dict) -> dict:
         # user's branch and/or leave the tree dirty.
         initial_sha = _git("rev-parse", "HEAD", cwd=local_repo_path).stdout.strip()
 
+        # How to rewind on failure. In patchless mode the pre-run state was a
+        # dirty tree holding the caller's edits, so --mixed (rewind HEAD, keep
+        # the files) restores it; --hard would destroy work the script never
+        # produced. In patch mode the script applied the diff itself, so --hard
+        # correctly restores the clean pre-run tree.
+        reset_mode = "--mixed" if patchless else "--hard"
+
         if dry_run:
             try:
                 return _run(local_repo_path, dry_run=True)
             finally:
                 # Restore even if _run raises (e.g. an unexpected git failure):
                 # the user's branch must never keep the dry-run commits.
-                _git("reset", "--hard", initial_sha, cwd=local_repo_path, check=False)
+                _git("reset", reset_mode, initial_sha, cwd=local_repo_path, check=False)
 
         try:
             result = _run(local_repo_path)
         except Exception:
             # Unexpected failure mid-run: restore the branch before letting
             # the exception propagate (main()'s generic handler formats it).
-            _git("reset", "--hard", initial_sha, cwd=local_repo_path, check=False)
+            _git("reset", reset_mode, initial_sha, cwd=local_repo_path, check=False)
             raise
         if "error" in result:
             # Known failure (git apply, signing, push, ...): the commits
             # made so far were never pushed, so reset them away rather than
             # leaving the user's checkout dirty/ahead of origin.
-            _git("reset", "--hard", initial_sha, cwd=local_repo_path, check=False)
+            _git("reset", reset_mode, initial_sha, cwd=local_repo_path, check=False)
         return result
 
     # --- Clone mode (default): shallow clone into a temp dir, push via token URL. ---
@@ -724,7 +825,7 @@ def main() -> None:
     if isinstance(result, dict) and isinstance(result.get("error"), str):
         result["error"] = _redact(result["error"])
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
     if isinstance(result, dict) and ("error" in result or result.get("ok") is False):
         sys.exit(1)

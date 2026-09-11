@@ -73,6 +73,7 @@ def make_git_side_effect(branch="feature-branch", status="", shas=None, sig="G",
         if args[0] == "apply":
             return _cp(args, 0 if apply_ok else 1, "", "" if apply_ok else "patch does not apply")
         if args[0] == "add":
+            state.setdefault("add_calls", []).append(args)
             return _cp(args, 0, "")
         if args[0] == "commit":
             return _cp(args, 0, "")
@@ -223,7 +224,17 @@ class TestListPrComments(unittest.TestCase):
 
         with patch.object(pr_tool, "_paginate", return_value=self._rest_comments()) as m_paginate, \
              patch.object(pr_tool, "_gql", side_effect=[page1, page2]) as m_gql:
-            result = pr_tool.list_pr_comments({"owner": "o", "repo": "r", "prNumber": 5})
+            # thread mapping is what this test covers, so opt back into the
+            # comments the new defaults trim away (resolved threads, replies)
+            result = pr_tool.list_pr_comments(
+                {
+                    "owner": "o",
+                    "repo": "r",
+                    "prNumber": 5,
+                    "includeResolved": True,
+                    "includeReplies": True,
+                }
+            )
 
         m_paginate.assert_called_once()
         self.assertEqual(m_gql.call_count, 2)
@@ -253,6 +264,33 @@ class TestListPrComments(unittest.TestCase):
         self.assertEqual(orphan["id"], 3)
         self.assertIsNone(orphan["threadId"])
         self.assertFalse(orphan["isResolved"])
+
+    def test_defaults_drop_resolved_replies_and_hunks(self):
+        page1 = self._gql_page("T1", 1, True, True, "cursor-abc")
+        page2 = self._gql_page("T2", 99, False, False, None)
+
+        with patch.object(pr_tool, "_paginate", return_value=self._rest_comments()), \
+             patch.object(pr_tool, "_gql", side_effect=[page1, page2]):
+            result = pr_tool.list_pr_comments({"owner": "o", "repo": "r", "prNumber": 5})
+
+        comments = result["comments"]
+        # comment 1 sits on a resolved thread, comment 2 is its reply: both gone.
+        self.assertEqual([c["id"] for c in comments], [3])
+        self.assertNotIn("diffHunk", comments[0])
+
+    def test_hunk_lines_keeps_last_n_lines(self):
+        rest = self._rest_comments()
+        rest[2]["diff_hunk"] = "@@ hdr @@\nline1\nline2\nline3"
+        page = self._gql_page("T2", 99, False, False, None)
+
+        with patch.object(pr_tool, "_paginate", return_value=rest), \
+             patch.object(pr_tool, "_gql", side_effect=[page]):
+            result = pr_tool.list_pr_comments(
+                {"owner": "o", "repo": "r", "prNumber": 5, "hunkLines": 2}
+            )
+
+        by_id = {c["id"]: c for c in result["comments"]}
+        self.assertEqual(by_id[3]["diffHunk"], "line2\nline3")
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +459,111 @@ class TestApplyPatch(unittest.TestCase):
         self.assertEqual(len(state["push_calls"]), 1)
         # a successful run must never hard-reset the user's branch
         self.assertEqual(state["reset_calls"], [])
+
+    def test_patchless_commit_in_local_mode_never_calls_git_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # apply_ok=False: if the code ever shelled out to `git apply`, the
+            # run would fail. Succeeding proves it was skipped entirely.
+            git_side_effect, state = make_git_side_effect(
+                branch="feature-branch", status="", shas=["initial-sha", "sha1"], apply_ok=False
+            )
+            with patch.object(pr_tool, "_http_get", return_value=_pr_data(branch="feature-branch")), \
+                 patch.object(pr_tool, "_git", side_effect=git_side_effect):
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [
+                            {"commitMessage": "fix: edited in place", "files": ["a.py"]}
+                        ],
+                    }
+                )
+        self.assertEqual(result, {"commitShas": ["sha1"]})
+        self.assertEqual(len(state["push_calls"]), 1)
+        self.assertEqual(state["reset_calls"], [])
+        # only the declared file is staged — never `git add -A`, which would
+        # sweep the user's unrelated uncommitted work into a pushed commit
+        self.assertEqual(state["add_calls"], [("add", "--", "a.py")])
+
+    def test_patchless_commit_without_local_repo_path_errors_before_any_call(self):
+        with patch.object(pr_tool, "_http_get") as m_get, \
+             patch.object(pr_tool, "_git") as m_git:
+            result = pr_tool.apply_patch(
+                {
+                    "owner": "o",
+                    "repo": "r",
+                    "prNumber": 1,
+                    "commits": [
+                        {"commitMessage": "fix: nothing to commit from a fresh clone", "files": ["a.py"]}
+                    ],
+                }
+            )
+        self.assertIn("error", result)
+        self.assertIn("localRepoPath", result["error"])
+        m_get.assert_not_called()
+        m_git.assert_not_called()
+
+    def test_patchless_commit_must_declare_its_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(pr_tool, "_http_get") as m_get, \
+                 patch.object(pr_tool, "_git") as m_git:
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [{"commitMessage": "fix: forgot the files key"}],
+                    }
+                )
+        self.assertIn('"files"', result["error"])
+        m_get.assert_not_called()
+        m_git.assert_not_called()
+
+    def test_cannot_mix_patch_and_patchless_commits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(pr_tool, "_http_get") as m_get, \
+                 patch.object(pr_tool, "_git") as m_git:
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [
+                            {"patch": "p", "commitMessage": "one"},
+                            {"commitMessage": "two", "files": ["a.py"]},
+                        ],
+                    }
+                )
+        self.assertIn("Cannot mix", result["error"])
+        m_get.assert_not_called()
+        m_git.assert_not_called()
+
+    def test_patchless_dirty_tree_allowed_and_reset_is_mixed(self):
+        """A patchless run needs the tree dirty, and a failure must not delete
+        the caller's edits — so it rewinds with --mixed, never --hard."""
+        with tempfile.TemporaryDirectory() as tmp:
+            git_side_effect, state = make_git_side_effect(
+                branch="feature-branch", status=" M a.py\n", shas=["initial-sha"], sig="N"
+            )
+            with patch.object(pr_tool, "_http_get", return_value=_pr_data(branch="feature-branch")), \
+                 patch.object(pr_tool, "_git", side_effect=git_side_effect):
+                result = pr_tool.apply_patch(
+                    {
+                        "owner": "o",
+                        "repo": "r",
+                        "prNumber": 1,
+                        "localRepoPath": tmp,
+                        "commits": [{"commitMessage": "fix: in place", "files": ["a.py"]}],
+                    }
+                )
+        # the dirty tree was accepted; the run failed later, on the signature guard
+        self.assertIn("no signature", result["error"])
+        self.assertEqual(state["push_calls"], [])
+        self.assertEqual(state["reset_calls"], [("reset", "--mixed", "initial-sha")])
 
     def test_local_repo_apply_failure_resets_hard_no_push(self):
         with tempfile.TemporaryDirectory() as tmp:
