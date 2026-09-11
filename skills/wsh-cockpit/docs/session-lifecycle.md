@@ -57,14 +57,16 @@ tu parles — sinon tu pilotes à l'aveugle.
 **Hôte déjà connu — pré-push avant le hop (voie recommandée).** `--pre <host>`
 pousse les helpers sur `<host>` **avant** le `ssh` du pane, `$HOME` résolu hors
 pane. Le premier `send`/`banner` après le hop est donc déjà en forme
-courte (~100 caractères), jamais le blob inline :
+courte (~100 caractères), jamais le blob inline. Exception à la règle
+`wait-done` : un hop SSH interactif ne rend pas la main et n'émet aucun footer
+`exit` — ne pas appeler `wait-done` sur le hop, mais sur la sonde distante :
 
 ```bash
 COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
-$COCKPIT spawn theo-plan --pre macbook-openclaw
+$COCKPIT spawn theo-plan --situate --pre macbook-openclaw
 # → SESSION=cockpit-... puis "pre-push: helpers staged on '...' — remote mode ON"
-$COCKPIT send 'tailscale ssh macbook-openclaw' "$SESS"   # le hop, sans footer/wait-done
-$COCKPIT send 'hostname 2>&1' "$SESS"   # sonde avec footer : wait-done s'applique ici
+$COCKPIT send 'tailscale ssh macbook-openclaw' "$SESS"   # hop interactif : pas de footer exit, exempté de wait-done
+$COCKPIT send 'hostname 2>&1' "$SESS"                   # sonde avec footer : wait-done obligatoire ici
 $COCKPIT wait-done "$SESS" 60
 $COCKPIT send 'docker ps 2>&1' "$SESS"  # déjà en forme courte
 ```
@@ -80,7 +82,7 @@ hard-fail).
 **Re-situer plus tard dans le workflow** (séquence manuelle équivalente) :
 
 ```bash
-$COCKPIT send 'hostname; pwd; whoami 2>&1' "$SESS"; $COCKPIT wait-done "$SESS" 60
+$COCKPIT send '{ hostname; pwd; whoami; } 2>&1' "$SESS"; $COCKPIT wait-done "$SESS" 60
 $COCKPIT read "$SESS" 20   # → srv1453980 / /docker/paperclip / root  (ou le Mac)
 ```
 
