@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Relais de sessions d'un chantier (skill chantier-relais) — générique, aucun projet en dur.
+# Divergence assumée vs la copie du skill : « haiku » est accepté en plus de
+# sonnet/opus/fable (politique de routage du dépôt : Haiku pour le mécanique pur).
+# Alias vérifié fonctionnel avec `claude --model haiku`.
 # Boucle : lit « NEXT: » dans STATE.md → lance claude avec le modèle exigé par
 # la fiche → quand le pilote quitte la session (/exit), relance pour l'étape
 # suivante. S'arrête sur NEXT: PAUSE, NEXT: FIN, fiche introuvable, erreur de
@@ -33,7 +36,7 @@ while :; do
 
   model=$(grep -m1 'Modèle :' "$fiche" | sed -E 's/.*Modèle : ?\**([A-Za-z]+).*/\1/' | tr '[:upper:]' '[:lower:]')
   case "$model" in
-    sonnet | opus | fable) ;;
+    sonnet | opus | fable | haiku) ;;
     *)
       echo "■ Modèle invalide ou absent dans $(basename "$fiche") — arrêt du relais." >&2
       exit 1
