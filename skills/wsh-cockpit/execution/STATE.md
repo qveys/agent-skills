@@ -77,8 +77,9 @@ NEXT: PAUSE
   `CONVENTIONS.md`. Décision actée : attribution IA interdite et commits signés,
   conformément aux règles du chantier précédent, **en contradiction assumée avec
   les consignes d'attribution de la session d'outillage** (arbitré par le pilote).
-- 2026-09-11 (découpage, correctif) : `execution/next.sh` n'acceptait que
-  `sonnet|opus|fable` — le relais se serait arrêté net sur `step-2.3`, dont la
-  fiche demande Haiku. `haiku` ajouté à la liste blanche de la copie projet
-  (divergence assumée vs la copie du skill, documentée en tête du script) ; alias
-  vérifié fonctionnel avec `claude --model haiku`.
+- 2026-09-11 (découpage, correctif) : l'ancien `execution/next.sh` hérité du
+  chantier précédent n'acceptait que `sonnet|opus|fable` — le relais se serait
+  arrêté net sur `step-2.3`, dont la fiche demande Haiku. `haiku` ajouté à la
+  liste blanche pour réaligner le script sur la copie générique du skill
+  (`skills/chantier-relais/scripts/next.sh`) ; alias vérifié fonctionnel avec
+  `claude --model haiku`.

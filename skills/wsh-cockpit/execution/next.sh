@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Relais de sessions d'un chantier (skill chantier-relais) — générique, aucun projet en dur.
-# Divergence assumée vs la copie du skill : « haiku » est accepté en plus de
-# sonnet/opus/fable (politique de routage du dépôt : Haiku pour le mécanique pur).
+# Aligné sur la copie du skill (skills/chantier-relais/scripts/next.sh) : « haiku »
+# est accepté en plus de sonnet/opus/fable (politique de routage du dépôt : Haiku pour le mécanique pur).
 # Alias vérifié fonctionnel avec `claude --model haiku`.
 # Boucle : lit « NEXT: » dans STATE.md → lance claude avec le modèle exigé par
 # la fiche → quand le pilote quitte la session (/exit), relance pour l'étape
