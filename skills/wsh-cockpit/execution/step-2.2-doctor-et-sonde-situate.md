@@ -40,14 +40,20 @@ Contrainte forte : la sortie brute de la sonde reste nécessaire **en interne**
 - [ ] Idem pour `adopt_print_probe` : la sonde d'adoption doit rester **visible**
       (c'est une exigence : jamais d'adoption silencieuse) mais en une ligne, pas
       vingt.
+- [ ] Museler les annonces internes de `send` et `wait-done` dans `situate_session`
+      (via `>/dev/null` ou silence non-TTY, comme fait pour `step-run` dans 2.1)
+      afin de ne pas gonfler la sortie de `spawn` avec les accusés intermédiaires.
+- [ ] Relancer les selftests pertinents ainsi que la suite minimale obligatoire
+      (`selftest-sep`, `selftest-output`, `selftest-guard`).
 - [ ] Mesurer avant/après, reporter dans STATE.md.
 
 ## Critère done
 
 `doctor` en non-TTY sur une machine saine renvoie ≤ 3 lignes ; `spawn --situate`
-renvoie ≤ 5 lignes dont les 3 valeurs de la sonde ; l'adoption reste visiblement
-sondée. `selftest-adopt` (instable connu — consigner, pas chasser),
-`selftest-live`, `selftest-docs` verts.
+renvoie ≤ 4 lignes en réutilisation et ≤ 5 lignes en création fraîche, incluant les
+3 valeurs de la sonde condensée ; l'adoption reste visiblement sondée. `selftest-adopt`
+(instable connu — consigner, pas chasser), `selftest-live`, `selftest-docs`,
+`selftest-sep`, `selftest-output`, `selftest-guard` verts.
 
 ## Fin de session
 

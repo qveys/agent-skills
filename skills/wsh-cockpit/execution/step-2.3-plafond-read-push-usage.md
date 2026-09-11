@@ -26,20 +26,29 @@ transfert, raccourcir la ligne d'usage.
 
 ## Tâches
 
+- [ ] RED d'abord : ajouter des assertions dans `selftest-live` et
+      `selftest-transfer` qui échouent aujourd'hui :
+      - `read 5000` borné à `WSH_READ_MAX` avec marqueur de troncature.
+      - Contournement explicite (ex. `--full` ou variable dédiée) rendant l'intégralité.
+      - Sortie de `wsh-push.sh` condensée en une seule ligne finale.
+      - Ligne d'usage de `wsh-live.sh` restreinte à ≤ 2 lignes.
 - [ ] Appliquer `WSH_READ_MAX` au bras `read)` : même traitement que `cmd_output`
       (tête + note de troncature + queue), avec un moyen explicite de passer outre.
 - [ ] Fusionner les trois annonces de `wsh-push.sh` en **une** ligne finale qui
       porte le sens, la méthode et la taille.
 - [ ] Usage : regrouper les `selftest-*` en un seul `selftest-<nom>` avec renvoi,
       plutôt que les énumérer. Dédupliquer les `usage:` de `step-run`.
-- [ ] Relancer `selftest-transfer`, `selftest-live`, `selftest-docs`.
+- [ ] Relancer les selftests : `selftest-transfer`, `selftest-live`,
+      `selftest-docs`, ainsi que la suite minimale obligatoire (`selftest-sep`,
+      `selftest-output`, `selftest-guard`).
 
 ## Critère done
 
 `read <session> 5000` ne renvoie pas 5000 lignes. Un `push` réussi renvoie une
 seule ligne. La ligne d'usage tient en ≤ 2 lignes. `selftest-transfer`,
-`selftest-live`, `selftest-docs` verts — et `selftest-docs` passe toujours son cas
-`coverage` (la liste des sous-commandes de `SKILL.md` reste exhaustive).
+`selftest-live`, `selftest-docs`, `selftest-sep`, `selftest-output`,
+`selftest-guard` verts — et `selftest-docs` passe toujours son cas `coverage`
+(la liste des sous-commandes de `SKILL.md` reste exhaustive).
 
 ## Fin de session
 
