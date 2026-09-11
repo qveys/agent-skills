@@ -1,9 +1,11 @@
 ---
 name: paperclip-vps
-description: Debug/administer the Paperclip AI-company server on vps-openclaw — paths, CLI board auth, agent/adapter config, logs, DB, patch infra. Use whenever the user mentions Paperclip, its companies (quentinveys.be, SoloSpark), its agents/adapters, or the paperclip container.
+description: Debug/administer the Paperclip AI-company server on vps-openclaw — paths, CLI board auth, agent/adapter config, logs, DB, patch infra. Use whenever the user mentions Paperclip, its companies (quentinveys.be, SoloSpark, MyHousekeeper, or any `company list` result), its agents/adapters, or the paperclip container, or says `tailscale ssh vps-openclaw` then the Paperclip docker container.
 ---
 
 # Paperclip on vps-openclaw — direct routes (validated 2026-07-04)
+
+Connect with `tailscale ssh vps-openclaw` (or `ssh vps-openclaw` when the host key is already pinned). Then work in Container `paperclip-paperclip-1`.
 
 ## Topology
 - Host: `vps-openclaw` (tailnet `100.100.10.60`, hostname srv1453980). SSH: `ssh vps-openclaw` (host key already pinned in `known_hosts`; on a fresh machine, verify the host fingerprint out-of-band — provider console or `tailscale ssh` — before first connect; do NOT default to `accept-new`, it trusts whatever key a first-connection MITM presents).
@@ -20,6 +22,7 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
 
 ## Known IDs (2026-07)
 - Company `quentinveys.be` = `92b95c2f-df76-47f8-acb8-17e7a6d0cb69` (13 agents; engineer Amelia d5b9099c… claude_local is the healthy reference config). Company `SoloSpark` = `217aab1b-90e2-48e1-bc29-1e531d3c7a3d` (CEO + Engineer 006975a9…; Engineer has adapterType `process` with EMPTY adapterConfig → `Process adapter missing command` — user deferred fixing; SoloSparkApp project also lacks git init → WorkspaceValidationFailure on issues SOL-2..9).
+- Company `MyHousekeeper` (live 2026-08 runs: plugin-sdk, OpenCode adapter, models not loading). Resolve current company/agent IDs with `company list` / `agent list -C` — do not assume only quentinveys.be and SoloSpark exist.
 - Orchestrator (quentinveys.be) = `9f7ee7bb-02b1-4217-a3b0-793ceb014705`, adapter `openclaw_gateway` → gateway on the Mac via `wss://macbook-openclaw.end-inconnu.ts.net` (portail Caddy routes WS upgrades → 127.0.0.1:18789).
 - Keys on the Mac in `~/.hermes/.env`: `PAPERCLIP_MCP_API_KEY` (agent-scoped to quentinveys.be CEO — CANNOT list companies, "Board access required"), `PAPERCLIP_CEO_KEY`.
 
@@ -45,7 +48,8 @@ description: Debug/administer the Paperclip AI-company server on vps-openclaw �
 - `intervalMinutes`/`retentionDays` backup config lives in `instances/default/config.json` **per instance** — each instance has its own file at its own path, and editing the wrong instance's copy leaves the running one unchanged. **Restarting the container does NOT apply a fix if the file itself was never actually edited** — a prior "already fixed" note turned out to be false because it had edited the wrong instance's file (still 60min/30d after restart). Editing this file via `sed -i` in the visible cockpit was **blocked by the Claude Code auto-mode classifier** (config-file edit) — this needs the user to apply it themselves in the pane, no workaround.
 - `/home/qveys` on this host isn't just Paperclip data — unrelated files accumulate there too (found/removed a 28G `skool-offline-archive`, 2026-08-20). Always `du -xh --max-depth=1 /` first for the whole picture, **as root** — as `qveys` it silently misses `/var/lib/containerd` (see above) and undercounts Docker-side bloat.
 
-## Patch infrastructure (established pattern — follow it)
+## Patch infrastructure (last resort — diagnose first)
+Do not start with a new patch. For adapter_failed / models-not-loading, inspect live OpenCode/Paperclip config and logs first and ask whether an existing patch is the break. Patch `/paperclip/patches/<name>/apply.sh` only after that, with user consent.
 - Boot steps: `/opt/paperclip/entrypoint.d/NN-name.sh` **inside the image** (write with `docker exec -u root`; /opt is root-owned). Read its `README.md` before adding. Conventions: `set -uo pipefail`, marker-gated idempotent, fail-SOFT (`exit 0` always), `.bg.sh` suffix = background (races with server module load — never use for server-code patches).
 - Patch payloads live on the volume: `/paperclip/patches/<name>/apply.sh` (survive image updates); the boot step just execs them.
 - `/docker/paperclip/data/entrypoint.d/` (volume) is **DEAD** — the entrypoint only reads `/opt/paperclip/entrypoint.d`.

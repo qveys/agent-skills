@@ -167,6 +167,8 @@ last-session state under `~/.cache/wsh-cockpit/`.
 
 ### Cockpit pré-ouvert par l'utilisateur — wrapper `claude-cockpit` et adoption
 
+Si l'utilisateur nomme un cockpit (exemple : `cockpit-omniroute-171628`), adopte et utilise cette session. N'en crée pas une seconde.
+
 L'utilisateur peut pré-ouvrir un ou plusieurs cockpits **avant même de te lancer**,
 via le wrapper `claude-cockpit` (`scripts/claude-cockpit.sh`, symlinké en
 `claude-cockpit` sur le `$PATH`) : `claude-cockpit theo-plan --keep --and deploy --
