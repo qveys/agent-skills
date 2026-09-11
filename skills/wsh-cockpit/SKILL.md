@@ -49,7 +49,7 @@ shell, so `;`, `&&`, pipes, `$(...)` work. Slow? `WSH_REXEC_TIMEOUT=180`.
 ## Mode 2 — live
 
 ```bash
-scripts/wsh-live.sh spawn [prefix] [--force] [--situate] [--pre <host>]  # open/continue a cockpit: reuses an alive session by default
+scripts/wsh-live.sh spawn [prefix] [--force] [--situate] [--pre <host>] [--tab <name>]  # open/continue a cockpit: reuses an alive session by default
 scripts/wsh-live.sh start [session] [--reuse]  # create a session (auto-unique if unnamed)
 scripts/wsh-live.sh open  [session] [--tab <name>]  # attach a Wave block, optionally on a named tab
 scripts/wsh-live.sh send  '<command>' [session]  # type a command + Enter (framed by default)
@@ -77,14 +77,14 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs} # renderer / one-liner / p
 
 - **`spawn`, jamais `start cockpit`** (nom réutilisé par d'autres agents) ; `--force` seulement pour une 2e fenêtre délibérée.
 - **Cockpit nommé par l'utilisateur** (ou listé dans `WSH_COCKPIT_ADOPT`) : adopte-le, n'en crée pas une seconde.
-- **Situe le shell juste après `spawn`** : `--situate`, ou `--pre <host>` si l'hôte est connu — une session réutilisée peut être restée en ssh.
+- **`--situate` obligatoire juste après `spawn`** ; `--pre <host>` est un plus (pré-push des helpers avant le hop), pas un substitut — une session réutilisée peut être restée en ssh.
 - **Bannières obligatoires** pour tout plan multi-étapes, jamais `echo` ni markdown nu.
 - **Une seule session SSH persistante** par hôte, pas une rafale de one-shots.
 - **Toujours terminer les commandes par `2>&1`** — non négociable.
 - **Jamais de `send` avant le footer `exit` du précédent** : `wait-done`, jamais un `sleep` ni du grep sur la sortie.
 - **Jamais de base64, `cat` ou heredoc dans `send`** pour transférer un fichier — `push`/`pull`.
 - **Lire un résultat avec `output`** (ou `wait-done --print`), pas `read N` ; `read` sert au scrollback libre (TUI, REPL, pane non framé).
-- **`stop` ce que tu as créé, `release` ce que tu as adopté** — une session `--keep` ne se détruit pas.
+- **`release` obligatoire pour une session `--keep`** (marqueur sticky) ; sinon `stop` normal, y compris adoptée sans `--keep`.
 - **Chaque sous-agent exporte son propre `WSH_COCKPIT_AGENT`** (jamais `user-preopen-*`/`released`) ; idem `WSH_COCKPIT_PREFIX` entre agents parallèles.
 - **Un nom de session est littéral**, jamais un préfixe abrégé.
 
