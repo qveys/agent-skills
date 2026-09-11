@@ -38,7 +38,7 @@ Sous Windows PowerShell :
 node .\install-ccusage-statusline.mjs "$env:USERPROFILE\.claude"
 ```
 
-L'intervalle Windows doit être divisible par 60 secondes. L'installateur utilise Python 3.8+ s'il est disponible pour le chemin de rendu rapide ; sinon il installe une variante Node fonctionnelle et affiche qu'elle doit être chronométrée sur cette machine.
+L'intervalle Windows doit être divisible par 60 secondes. Sous Windows, l'installateur utilise Python 3.8+ (`py -3`, puis `python.exe`) s'il est disponible pour le chemin de rendu rapide ; sinon il installe une variante Node fonctionnelle et affiche qu'elle doit être chronométrée sur cette machine. **Ce repli Node n'existe que sous Windows** : sur macOS, `/usr/bin/python3` en version 3.8 ou supérieure est exigé et l'installation s'arrête sur une erreur si ce contrôle échoue.
 
 Pour utiliser un `ccusage` déjà installé sans le remplacer :
 
@@ -94,8 +94,10 @@ La commande est écrite par l'installateur dans la configuration, sous forme de 
 
 | Plateforme | `producer_kick_argv` |
 | --- | --- |
-| macOS | `["/bin/launchctl","kickstart","-p","gui/<uid>/com.qveys.ccusage-status-cache"]` |
+| macOS | `["/bin/sh","-c","/bin/launchctl bootstrap gui/<uid> '<plist>' 2>/dev/null; exec /bin/launchctl kickstart -p 'gui/<uid>/com.qveys.ccusage-status-cache'"]` |
 | Windows | `["schtasks.exe","/Run","/TN","qveys-ccusage-status-cache"]` |
+
+Sur macOS l'argv passe par `/bin/sh` parce qu'un `kickstart` seul échoue tant que le LaunchAgent n'est pas chargé dans le domaine : le `bootstrap` préalable le charge si besoin (erreur ignorée s'il l'est déjà), puis `exec` rend la main à `kickstart -p`.
 
 Avec `--no-schedule`, la clé est absente et aucune relance n'est tentée. `refresh_throttle_seconds` (par défaut `intervalle / 4`, minimum 300 s) borne les tentatives via une sentinelle `.refresh-requested` déposée à côté du cache, ce qui évite de relancer un producteur bloqué à chaque rendu. Un `↻` suffixe l'avertissement quand une relance vient d'être demandée. Les deux variantes de statusline, Python et Node, implémentent ce comportement à l'identique.
 
