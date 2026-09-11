@@ -25,7 +25,8 @@ c'est le livrable chiffré du chantier.
       qu'aucune coupe n'a emporté de la donnée (décision actée n°4 de
       CONVENTIONS.md : couper du chatter, jamais de la donnée).
 - [ ] Lancer la suite complète : `selftest-docs`, `-sep`, `-output`, `-live`,
-      `-gc`, `-claim`, `-oneshot-ssh`, `-transfer`, `-guard`. Consigner le résultat.
+      `-gc`, `-claim`, `-oneshot-ssh`, `-transfer`, `-guard`, `-cache`,
+      `-tab`, `-wrapper`, `-attach`, `-adopt`. Consigner le résultat.
       `selftest-adopt` instable connu → le dire, ne pas le chasser.
 - [ ] Vérifier qu'aucune session `cockpit-*` ne traîne après la suite (c'est
       l'objet de la fiche 1.1).
