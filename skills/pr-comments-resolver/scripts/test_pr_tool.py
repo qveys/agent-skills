@@ -336,6 +336,25 @@ class TestUpdateThreads(unittest.TestCase):
             },
         )
 
+    def test_resolved_without_thread_id_is_a_failure_not_a_silent_ok(self):
+        """`list_pr_comments` returns threadId: null for a comment with no
+        review thread; resolving is then impossible and must be reported."""
+        inp = {
+            "owner": "o",
+            "repo": "r",
+            "prNumber": 1,
+            "updates": [{"commentId": 3, "message": "m3", "resolved": True}],
+        }
+        with patch.object(pr_tool, "_http_post") as m_post, \
+             patch.object(pr_tool, "_gql") as m_gql:
+            result = pr_tool.update_threads(inp)
+
+        m_post.assert_called_once()  # the reply still goes out
+        m_gql.assert_not_called()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["results"][0]["step"], "resolve")
+        self.assertIn("threadId", result["results"][0]["error"])
+
     def test_real_pass_middle_failure_does_not_stop_others(self):
         inp = {
             "owner": "o",

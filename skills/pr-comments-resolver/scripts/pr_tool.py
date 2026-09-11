@@ -353,15 +353,17 @@ def apply_patch(inp: dict) -> dict:
         and pushes back through the token URL. This is the original behaviour.
       - Local mode (opt-in via {"localRepoPath": "/abs/path"}): reuses an
         already-checked-out working copy instead of cloning. Preconditions
-        (path is a git repo, its current branch is the PR head branch, its
-        tree is clean) are verified up front, each with its own clear error.
+        (path is a git repo, its current branch is the PR head branch, and —
+        for patch entries only — its tree is clean; a patchless entry needs
+        the tree dirty) are verified up front, each with its own clear error.
         The user's repo config is never touched (no `git config` calls); an
         `authorName`/`authorEmail` override, if given, is passed per commit
         via `git -c user.name=... -c user.email=... commit ...` instead.
         Pushes go through the existing `origin` remote (no token URL). On
         failure (git apply, signing, push, or an unexpected exception), the
-        branch is hard-reset back to its pre-run HEAD before the error is
-        returned/raised.
+        branch is reset back to its pre-run HEAD before the error is
+        returned/raised — `--hard` for patch entries, `--mixed` for patchless
+        ones, whose payload is the caller's own edits.
 
     Input – preview mode:
       - {"dryRun": true} runs the full flow (clone or local checks, patch
@@ -369,9 +371,10 @@ def apply_patch(inp: dict) -> dict:
         created locally so its diffstat can be inspected; a signing failure
         no longer aborts the run – it retries the commit unsigned and just
         flags it, since the point of a dry run is to diagnose before the
-        real pass. In local-repo mode, the branch is hard-reset back to its
-        pre-dry-run HEAD before returning, so the user's checkout never ends
-        up carrying unpushed commits. In clone mode there is nothing to
+        real pass. In local-repo mode, the branch is reset back to its
+        pre-dry-run HEAD before returning (`--hard`, or `--mixed` for
+        patchless entries so the caller's edits survive), so the user's
+        checkout never ends up carrying unpushed commits. In clone mode there is nothing to
         clean up (the clone lives in a discarded temp dir).
 
     Output:
@@ -744,7 +747,9 @@ def update_threads(inp: dict) -> dict:
     """
     For each update:
       1. Post a reply comment in the thread (if `message` is provided).
-      2. Resolve the thread via GraphQL (if `resolved=true` and `threadId` present).
+      2. Resolve the thread via GraphQL when `resolved=true`. A missing
+         `threadId` is reported as a per-update failure (step "resolve"),
+         never as a silent success.
 
     Each update is processed independently: a failure on one update (either
     the reply post or the thread resolution) is caught and does not interrupt
@@ -812,7 +817,16 @@ def update_threads(inp: dict) -> dict:
 
             # Resolve thread via GraphQL
             step = "resolve"
-            if resolved and thread_id:
+            if resolved:
+                if not thread_id:
+                    # The reply went out, but "resolved" could not be honoured.
+                    # Reporting ok here would claim a thread was closed when it
+                    # is still open.
+                    raise RuntimeError(
+                        "no threadId for this comment, cannot resolve the thread "
+                        "(list_pr_comments returns null when the comment has no "
+                        "review thread — e.g. a plain PR comment)."
+                    )
                 _gql(
                     """
                     mutation($threadId: ID!) {

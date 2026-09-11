@@ -98,7 +98,8 @@ in the thread.
 
 **Step 6 — Decide the resolution status.** `resolved = true` when the patch
 fully addressed the request, or the comment needed no code change (praise,
-obsolete — or skip it entirely). `resolved = false` when the fix is partial, the
+obsolete — skip the code edit, not the thread update: step 7 still needs an
+entry for it). `resolved = false` when the fix is partial, the
 request ambiguous, or the patch failed.
 
 **Step 7 — Build the `updates` list.** One entry per root comment, always with
