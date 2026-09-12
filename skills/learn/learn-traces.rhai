@@ -153,11 +153,11 @@ while m < n_map {
     let first = m * batch;
     let last = first + batch - 1;
     if last > count - 1 { last = count - 1; }
-    let note = run_dir + sep + "map" + pad4(first) + "-" + pad4(last) + ".md";
+    let note = run_dir + sep + "map" + sep + pad4(first) + "-" + pad4(last) + ".md";
     let p = rules(run_dir, today, user_label);
     p += "\nYou are mapper " + (m + 1).to_string() + " of " + n_map.to_string() + ".\n";
     p += "Read every file in " + run_dir + sep + "sessions" + sep + " whose 4-digit prefix is between " + pad4(first) + " and " + pad4(last) + " inclusive (" + (last - first + 1).to_string() + " files). List the directory first, then read each file in full.\n";
-    p += "Each file is one Grok Build session " + user_label + " sat at: `turns` (the human prompts, in order), `slash_commands`, `skills_loaded`, `mcp_servers_used`, `tools`, `top_dirs_touched`, `cwd`, `git_root`, `title`, `model`.\n";
+    p += "Each file is one collected coding-agent session " + user_label + " sat at. Use the record's `harness` field (claude, grok, codex, cursor) rather than assuming Grok Build. Fields: `turns` (the human prompts, in order), `slash_commands`, `skills_loaded`, `mcp_servers_used`, `tools`, `top_dirs_touched`, `cwd`, `git_root`, `title`, `model`.\n";
     p += "Read " + run_dir + sep + "surfaces.json once so you know which skills exist and are loaded (name, path, source, loaded).\n";
     p += "Read " + skill_dir + sep + "signals.md: it defines what to extract (sections 1, 2, 3, 5) and the per-session record shape. Section 4 is not your job.\n";
     p += focus_line;
@@ -228,8 +228,7 @@ loop {
         p += "## 2. Skills to update — one bullet per skill: path, the stale line quoted from the current file (open it; no line, no item), trace evidence with session ids, proposed replacement text.\n";
         p += "## 3. Unused -> delete or disable — from usage.json only, per signals.md section 4: name, kind, path, count, last_used, why removal is safe or `ask`.\n";
         p += "## 4. Gaps — recurring needs with no owner, with session ids.\n";
-        p += "## Dropped — every candidate from the input notes you did not carry forward, with the reason.\n";
-        p += "\nKeep every session id. Do not merge two different instructions into one phrase. Keep the file under 350 lines: the readers after you load it whole, and a longer file fails their read. Put the Dropped section in a sibling file `" + out + ".dropped.md` and leave a one-line pointer to it. Return ok=true after the file exists; proposals is the number of bullets in sections 1-3.";
+        p += "\nKeep every session id. Do not merge two different instructions into one phrase. Keep the file under 350 lines: the readers after you load it whole, and a longer file fails their read. Put every candidate you did not carry forward in a sibling file `" + out + ".dropped.md` with reasons, and leave a one-line pointer to it in the synthesis (do not duplicate that list inside " + out + "). Return ok=true after the file exists; proposals is the number of bullets in sections 1-3.";
         outs.push(out);
         jobs.push(#{
             prompt: p,
@@ -337,6 +336,7 @@ if report != () && report.success && report.output != () {
     if report.output.action_count != () { action_count = report.output.action_count; }
 } else {
     log("Report agent failed; the synthesis at " + synthesis + " is the best available output.");
+    pause("verification", "Report agent failed; report.md/actions.json may be missing. Do not curate. Synthesis is at " + synthesis + ".");
 }
 
 let scratch = write_scratch_file("report.md", overview + "\n\nFull report: " + report_path + "\nActions: " + actions_path);
