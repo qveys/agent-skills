@@ -156,8 +156,18 @@ $COCKPIT remote-init --container paperclip "$SESS"
 ```
 
 `paperclip` ci-dessus est le **nom du conteneur** — ce que `docker exec`/`docker cp`
-exigent. Si le nom du service Compose diffère du nom du conteneur, résous-le d'abord :
-`docker ps --filter name=<service> --format '{{.Names}}'`.
+exigent. Si le nom du service Compose diffère du conteneur, résous-le par le service,
+jamais par `docker ps --filter name=` (filtre **sous-chaîne** : `name=paperclip` rend
+aussi `paperclip-bef-paperclip-1`), et exige **un seul** conteneur — depuis le
+répertoire du projet Compose, sinon `docker compose ps` ne voit pas le service :
+
+```bash
+ids=$(docker compose ps --status running -q <service>)
+count=$(printf '%s\n' "$ids" | grep -c .)
+[ "$count" -eq 1 ] || { echo "attendu 1 conteneur, trouvé $count" >&2; exit 1; }
+name=$(docker inspect --format '{{.Name}}' "$ids" | sed 's#^/##')
+$COCKPIT remote-init --container "$name" "$SESS"
+```
 
 Copie les mêmes fichiers helper au même chemin absolu déjà enregistré pour la
 session — `send`/`banner` n'ont rien à changer. Détail (transport, cas

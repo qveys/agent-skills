@@ -111,8 +111,12 @@
 #                              <container> must be a container NAME or ID, which is what
 #                              `docker exec`/`docker cp` accept — a Compose SERVICE name
 #                              only works when the container is literally named that
-#                              (`container_name:`); otherwise resolve it first with
-#                              `docker ps --filter name=<service> --format '{{.Names}}'`.
+#                              (`container_name:`); otherwise resolve it through the
+#                              Compose service (`docker compose ps --status running -q
+#                              <service>`), require exactly one container, and read its
+#                              name with `docker inspect --format '{{.Name}}'` — NOT with
+#                              `docker ps --filter name=<service>`, which matches
+#                              substrings and can return other containers.
 #                              Does NOT flip remote_mode/remote_helper_path (no framing-
 #                              mode switch, just a file push); best-effort, fails soft.
 #   local-init  [session]      revert remote-init — back to local helper-file framing
@@ -526,7 +530,7 @@ container_push_helpers() {  # $1 sess $2 container -> 0 ok, 1 skipped/failed
   set -e
   if [ "$rc" -ne 0 ]; then
     echo "warn: failed to push helpers into container '$container' (rc=$rc): $out" >&2
-    echo "warn: '$container' must be a container NAME or ID, which is what docker exec/docker cp accept — a Compose SERVICE name only works when the container is literally named that (container_name:); resolve it first, e.g. docker ps --filter name=<service> --format '{{.Names}}'" >&2
+    echo "warn: '$container' must be a container NAME or ID, which is what docker exec/docker cp accept — a Compose SERVICE name only works when the container is literally named that (container_name:); otherwise resolve it through the Compose service (docker compose ps --status running -q <service>), require exactly one container, and read its name with docker inspect --format '{{.Name}}' — not with docker ps --filter name=<service>, which matches substrings" >&2
     return 1
   fi
   echo "helpers pushed into container '$container':$dir — send/banner keep the short sourcing form one layer deeper"
