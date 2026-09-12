@@ -1,33 +1,168 @@
-# Node.js
-node_modules/
-dist/
+# ─────────────────────────────────────────────────────────────────────────────
+# agent-skills — repository-wide ignores
+#
+# Rule of thumb: this repository tracks Markdown skills plus a small TypeScript
+# toolchain, so every pattern below targets something generated, machine-local or
+# secret. `vendor/`, `skills/`, `src/`, `tests/`, `.github/` and `.claude-plugin/`
+# are NEVER ignored — they are the repository's actual content.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# OS files
+# ── OS metadata ──────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.AppleDouble
+.LSOverride
+Icon?
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# npm logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Editor directories and files
+# ── Editors, IDEs, shell scratch ─────────────────────────────────────────────
 .vscode/
 .idea/
+.history/
+.settings/
+.project
+.classpath
+*.iml
+*.ipr
+*.iws
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.code-workspace
+*.~lock.*
+*~
+*.swp
 
-# graphify
+# ── AI coding agents (machine-local state, never shared) ─────────────────────
+.aider*
+.claude/settings.local.json
+.claude/assistant-daemon-state.json
+.claude/agent-state/
+.cursor/
+.grok/
+.codex/
+.continue/
+.crush/
+.omp/
+CLAUDE.local.md
+AGENTS.local.md
+
+# ── Secrets and local environment ────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+.netrc
+.npmrc.local
+.docker/config.json
+
+# ── Node.js / TypeScript ─────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+out/
+coverage/
+.vitest/
+.nyc_output/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/install-state.gz
+.eslintcache
+.biome-cache/
+
+# ── Python (skills/learn ships Python) ───────────────────────────────────────
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+.Python
+*.egg-info/
+.eggs/
+develop-eggs/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+
+# ── Other toolchains (unused today, cheap to cover) ──────────────────────────
+target/
+*.rs.bk
+.gradle/
+*.class
+*.war
+.bundle/
+.terraform/
+*.tfstate
+*.tfstate.*
+.phpunit.result.cache
+
+# ── Data, databases, runtime droppings ───────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+*.db-shm
+*.db-wal
+*.log
+logs/
+.cache/
+tmp/
+temp/
+.tmp/
+*.tmp
+*.bak
+*.orig
+*.rej
+*.pid
+*.seed
+*.state/
+
+# ── Containers / infrastructure ──────────────────────────────────────────────
+.docker/
+docker-compose.override.yml
+
+# ── Nested git worktrees created inside the checkout ─────────────────────────
+# Agents may add scratch worktrees under .worktrees/; they must never be
+# committed as repository content.
+.worktrees/
+
+# ── Local tooling output (pre-existing entries, kept) ────────────────────────
 graphify-out/
 .tokensave
