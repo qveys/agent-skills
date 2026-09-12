@@ -32,11 +32,12 @@ TURN_CAP = 2000
 USER_QUERY_RE = re.compile(r"<user_query>(.*?)</user_query>", re.S)
 SECRET_RES = [
     re.compile(r"\b(xai|sk|ghp|gho|ghu|ghs|glpat|npm)[-_](?=(?:[A-Za-z_\-]*\d){3})[A-Za-z0-9_\-]{16,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\b(AKIA|ASIA)[A-Z0-9]{16}\b"),
     re.compile(r"\bxox[abpsr]-\d[A-Za-z0-9-]{20,}\b"),
     re.compile(r"\b[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\b"),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9_\-./+=]{20,}"),
-    re.compile(r"(?i)\b(token|api[_-]?key|secret|password|passwd)\b\s*[:=]\s*['\"]?(?=[A-Za-z0-9_\-./+=]*\d)[A-Za-z0-9_\-./+=]{16,}"),
+    re.compile(r"(?i)\b(token|api[_-]?key|secret|password|passwd)\b\s*[:=]\s*['\"]?[A-Za-z0-9_\-./+=]{16,}"),
     re.compile(r"\b[a-f0-9]{64,}\b"),
 ]
 SLASH_RE = re.compile(r"(?<![\w/~.])/([a-z][a-z0-9-]{1,63})\b(?!/)")
@@ -97,9 +98,26 @@ def parse_time(s):
     if not s:
         return None
     try:
-        return dt.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        ts = dt.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
     except ValueError:
         return None
+    return ts if ts.tzinfo is not None else ts.replace(tzinfo=dt.timezone.utc)
+
+
+def write_json_atomic(path: str, value) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", dir=os.path.dirname(path) or ".", text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(value, f, indent=1)
+            f.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def redact(text: str) -> str:
@@ -173,6 +191,26 @@ def toml_subtables(text: str, table: str) -> list[str]:
     return names
 
 
+_GIT_ROOT_CACHE: dict[str, str] = {}
+
+
+def git_root_of(cwd: str) -> str:
+    if not cwd:
+        return ""
+    if cwd in _GIT_ROOT_CACHE:
+        return _GIT_ROOT_CACHE[cwd]
+    try:
+        r = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+        )
+        root = r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else cwd
+    except (OSError, subprocess.TimeoutExpired):
+        root = cwd
+    _GIT_ROOT_CACHE[cwd] = root
+    return root
+
+
 def git_tracked(path: str, root: str) -> bool | None:
     try:
         r = subprocess.run(["git", "-C", root, "ls-files", "--error-unmatch", "--", path],
@@ -201,6 +239,8 @@ def text_of(content) -> str:
         parts = []
         for c in content:
             if isinstance(c, dict):
+                if c.get("type") in ("tool_result", "tool_use"):
+                    continue
                 if c.get("type") in ("text", "input_text", "output_text") or "text" in c:
                     parts.append(c.get("text") or "")
                 elif isinstance(c.get("content"), str):
@@ -209,6 +249,8 @@ def text_of(content) -> str:
                 parts.append(c)
         return "\n".join(parts)
     if isinstance(content, dict):
+        if content.get("type") in ("tool_result", "tool_use"):
+            return ""
         return text_of(content.get("text") or content.get("content") or "")
     return ""
 
@@ -263,18 +305,19 @@ def top_dirs(paths_touched: collections.Counter, base: str) -> dict:
 
 def record(id_: str, harness: str, cwd: str, git_root: str, title: str, created_at, updated_at,
            model, turns, tools, skill_loads, skill_load_paths, slash, mcp_tools, paths_touched,
-           subagents, workflow_launches, dropped_turns, parse_errors, trace_path, extra=None) -> dict | None:
+           subagents, workflows, dropped_turns, parse_errors, trace_path, extra=None) -> dict | None:
     if not turns:
         return None
     real_tools = sum(n for name, n in tools.items() if name not in ("send_feedback",))
     smoke_test = real_tools == 0 and all(len(t.split()) < 3 for t in turns)
+    wf = workflows or collections.Counter()
     rec = {
         "id": id_,
         "harness": harness,
         "cwd": cwd,
         "git_root": git_root,
         "branch": (extra or {}).get("branch") or "",
-        "title": title,
+        "title": redact(title or "")[:200],
         "session_kind": (extra or {}).get("session_kind"),
         "created_at": created_at,
         "updated_at": updated_at,
@@ -290,7 +333,8 @@ def record(id_: str, harness: str, cwd: str, git_root: str, title: str, created_
         "mcp_servers_used": dict(mcp_tools.most_common()),
         "tools": dict(tools.most_common(25)),
         "subagent_spawns": subagents,
-        "workflow_launches": workflow_launches,
+        "workflows_launched": dict(wf.most_common()),
+        "workflow_launches": int(sum(wf.values())),
         "top_dirs_touched": top_dirs(paths_touched, git_root or cwd),
         "trace_path": trace_path,
     }
@@ -329,7 +373,7 @@ def scan_grok(sess_dir: str, summary: dict, drop_patterns: list[re.Pattern]) -> 
     slash = collections.Counter()
     paths_touched = collections.Counter()
     subagents = 0
-    workflow_launches = 0
+    workflows = collections.Counter()
     dropped_turns = 0
     parse_errors = 0
     for r, parse_errors in iter_jsonl(chat):
@@ -360,7 +404,12 @@ def scan_grok(sess_dir: str, summary: dict, drop_patterns: list[re.Pattern]) -> 
                 elif name == "spawn_subagent":
                     subagents += 1
                 elif name == "workflow":
-                    workflow_launches += 1
+                    src = a.get("source") if isinstance(a.get("source"), dict) else {}
+                    wname = src.get("name") or ""
+                    if not wname:
+                        sp = src.get("script_path") or a.get("script_path") or ""
+                        wname = os.path.splitext(os.path.basename(str(sp)))[0] if sp else "workflow"
+                    workflows[wname] += 1
                 target = a.get("target_file") or a.get("file_path") or a.get("path")
                 if isinstance(target, str) and target:
                     note_skill_path(target, skill_loads, skill_load_paths, paths_touched)
@@ -371,7 +420,7 @@ def scan_grok(sess_dir: str, summary: dict, drop_patterns: list[re.Pattern]) -> 
         summary.get("git_root_dir") or "", summary.get("generated_title") or "",
         summary.get("created_at"), summary.get("updated_at"), summary.get("current_model_id"),
         turns, tools, skill_loads, skill_load_paths, slash, mcp_tools, paths_touched,
-        subagents, workflow_launches, dropped_turns, parse_errors, chat,
+        subagents, workflows, dropped_turns, parse_errors, chat,
         extra={"session_kind": summary.get("session_kind"), "branch": summary.get("head_branch") or ""},
     )
 
@@ -506,10 +555,10 @@ def scan_claude_like(path: str, harness: str, drop_patterns, include_sidechains:
                     note_skill_path(target, skill_loads, skill_load_paths, paths_touched)
     if not title and turns:
         title = turns[0][:80]
-    git_root = cwd
+    git_root = git_root_of(cwd) if cwd else cwd
     return record(sid, harness, cwd, git_root, title, created_at, updated_at, None,
                   turns, tools, skill_loads, skill_load_paths, slash, mcp_tools, paths_touched,
-                  subagents, 0, dropped_turns, parse_errors, path, extra={"branch": branch})
+                  subagents, collections.Counter(), dropped_turns, parse_errors, path, extra={"branch": branch})
 
 
 def keep_filters(rec: dict | None, args, cutoff, exclude_cwd, only_ids, dropped: collections.Counter) -> dict | None:
@@ -663,9 +712,9 @@ def scan_codex(path: str, drop_patterns) -> dict | None:
             updated_at = ts
     if not title and turns:
         title = turns[0][:80]
-    return record(sid, "codex", cwd, cwd, title, created_at, updated_at, None,
+    return record(sid, "codex", cwd, git_root_of(cwd) if cwd else cwd, title, created_at, updated_at, None,
                   turns, tools, skill_loads, skill_load_paths, slash, mcp_tools, paths_touched,
-                  subagents, 0, dropped_turns, parse_errors, path)
+                  subagents, collections.Counter(), dropped_turns, parse_errors, path)
 
 
 def collect_codex(home: str, args, cutoff, exclude_cwd, drop_patterns, only_ids) -> tuple[int, collections.Counter, list]:
@@ -968,6 +1017,8 @@ def write_usage_and_phrases(out: str, kept: list[dict], surfaces: dict) -> list:
                 hit(("skill" if name in skill_names else "workflow", name), r, n, "slash")
         for name, n in r["mcp_servers_used"].items():
             hit(("mcp", name), r, n, "tool")
+        for name, n in (r.get("workflows_launched") or {}).items():
+            hit(("workflow", name), r, n, "launch")
 
     items = []
     for s in surfaces["skills"]:
@@ -1141,14 +1192,21 @@ def main() -> int:
 
     if args.out:
         out = os.path.abspath(os.path.expanduser(args.out))
+        os.makedirs(out, exist_ok=True)
+        try:
+            os.chmod(out, 0o700)
+        except OSError:
+            pass
     else:
-        stamp = "estimate" if args.estimate else dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
-        out = os.path.join(tempfile.gettempdir(), "learn", stamp)
-    os.makedirs(out, exist_ok=True)
-    try:
+        parent = os.path.join(tempfile.gettempdir(), "learn")
+        os.makedirs(parent, exist_ok=True)
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
+        stamp = "estimate-" if args.estimate else dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S-%f-")
+        out = tempfile.mkdtemp(prefix=stamp, dir=parent)
         os.chmod(out, 0o700)
-    except OSError:
-        pass
     if not args.estimate:
         os.makedirs(os.path.join(out, "sessions"), exist_ok=True)
         for sub in ("map", "reduce", "verify"):
@@ -1290,7 +1348,6 @@ def main() -> int:
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=1, ensure_ascii=False)
 
-    os.makedirs(os.path.dirname(state_path), exist_ok=True)
     try:
         state = read_json(state_path)
     except (OSError, ValueError):
@@ -1299,8 +1356,7 @@ def main() -> int:
     if kept:
         state["pending"] = {"run_dir": out, "status": "collected", "started_at": manifest["generated_at"],
                             "updated_at": manifest["generated_at"], "report_ready": False}
-    with open(state_path, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=1)
+    write_json_atomic(state_path, state)
 
     log(f"seen={seen} kept={len(kept)} dropped={dict(dropped)} turns={manifest['human_turns_total']} harnesses={present}")
     log(f"surfaces: skills={len(surfaces['skills'])} plugins={len(surfaces['plugins'])} mcp={len(surfaces['mcp_servers'])}")
