@@ -15,6 +15,8 @@ SKILL = Path(__file__).resolve().parents[1]
 COLLECT = SKILL / "collect_sessions.py"
 STATE = SKILL / "state.py"
 PY = sys.executable
+sys.path.insert(0, str(SKILL))
+import collect_sessions as cs  # noqa: E402
 
 
 def run(args: list[str], env: dict | None = None) -> subprocess.CompletedProcess:
@@ -172,6 +174,18 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(result["kept"], 1)
         self.assertEqual(result["harnesses"], ["codex"])
 
+    def test_title_is_redacted(self) -> None:
+        claude_session(
+            self.claude, "sec", self.cwd,
+            "please always run the tests before commit thanks password=abcdefghijklmnop",
+            "2026-09-02T10:00:00Z",
+        )
+        result = self.collect()
+        self.assertEqual(result["kept"], 1)
+        sess = next((self.out / "sessions").glob("*.json"))
+        rec = json.loads(sess.read_text())
+        self.assertNotIn("abcdefghijklmnop", rec["title"])
+
     def test_estimate_lists_scopes(self) -> None:
         grok_session(self.grok, "g1", self.cwd, "please always run the tests before commit thanks", "2026-09-01T10:00:00+00:00")
         r = self.collect("--estimate")
@@ -191,6 +205,29 @@ class CollectTests(unittest.TestCase):
             "--out", str(self.out),
         ])
         self.assertEqual(r.returncode, 2)
+
+
+class HelperTests(unittest.TestCase):
+    def test_parse_time_naive_is_utc(self) -> None:
+        ts = cs.parse_time("2024-05-01T10:00:00")
+        self.assertIsNotNone(ts)
+        self.assertIsNotNone(ts.tzinfo)
+        cutoff = cs.parse_time("2024-05-01T09:00:00Z")
+        self.assertGreater(ts, cutoff)
+
+    def test_redact_github_pat_and_alpha_password(self) -> None:
+        text = "token github_pat_abcdefghijklmnopqrstuvwxyz123 and password=abcdefghijklmnop"
+        out = cs.redact(text)
+        self.assertNotIn("github_pat_abcdefghijklmnopqrstuvwxyz123", out)
+        self.assertNotIn("abcdefghijklmnop", out)
+
+    def test_text_of_skips_tool_blocks_keeps_text(self) -> None:
+        content = [
+            {"type": "tool_result", "content": "SECRET_FROM_TOOL"},
+            {"type": "text", "text": "please always run the tests before commit thanks"},
+        ]
+        self.assertIn("always run the tests", cs.text_of(content))
+        self.assertNotIn("SECRET_FROM_TOOL", cs.text_of(content))
 
 
 class StateTests(unittest.TestCase):
@@ -214,6 +251,14 @@ class StateTests(unittest.TestCase):
         r = run([PY, str(STATE), "--home", str(self.home), "get"])
         self.assertEqual(r.returncode, 3)
         self.assertEqual(json.loads(r.stdout)["pending"]["status"], "collected")
+
+    def test_restrict_missing_is_nonzero(self) -> None:
+        missing = str(Path(self.tmp.name) / "no-such-file")
+        r = run([PY, str(STATE), "--home", str(self.home), "restrict", missing])
+        self.assertEqual(r.returncode, 1)
+        payload = json.loads(r.stdout)
+        self.assertEqual(payload["restricted"], [])
+        self.assertTrue(payload["failed"])
 
 
 if __name__ == "__main__":
