@@ -1,0 +1,35 @@
+# CodeRabbit configuration
+# Reference: https://docs.coderabbit.ai/reference/configuration
+# Validated against https://coderabbit.ai/integrations/schema.v2.json
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Why `vendor/` is excluded from review
+#
+# `vendor/` holds byte-identical mirrors of third-party skills, kept in sync by
+# `npm run skills:sync` (see `sources.yaml` / `sources.lock.yaml`). Repository
+# policy — stated in `AGENTS.md`, `README.md`, and enforced by the
+# `destination: vendor/` rule in `src/manifest/index.ts` — is that these files
+# must never diverge from upstream.
+#
+# A finding under `vendor/` therefore cannot be acted on here: patching it would
+# be silently overwritten by the next sync and would destroy the provenance
+# guarantee the mirror exists to provide. Reviewing it produces a thread that can
+# only ever be closed with "reported upstream".
+#
+# That is not a reason to ignore what a reviewer spots — the findings are real
+# and they are filed against the upstream repository instead. Open reports
+# originating from this repository:
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/136
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/137
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/138
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/139
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/140
+#
+# Everything outside `vendor/` is reviewed exactly as before. Listing only
+# exclusions means "everything except these", so there is no include list to
+# keep in sync as the repository grows.
+# ─────────────────────────────────────────────────────────────────────────────
+
+reviews:
+  path_filters:
+    - "!vendor/**"
