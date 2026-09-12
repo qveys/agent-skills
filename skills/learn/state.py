@@ -23,6 +23,7 @@ import os
 import shutil
 import stat
 import sys
+import tempfile
 
 STATUSES = ("collected", "running", "report_ready", "curating", "done")
 
@@ -41,10 +42,18 @@ def load(path: str) -> dict:
 
 def save(path: str, state: dict) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=1)
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", dir=os.path.dirname(path), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=1)
+            f.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def allowed_roots(learn_home: str) -> list[str]:
@@ -142,13 +151,18 @@ def main() -> int:
         return 0
 
     if args.cmd == "restrict":
+        restricted = []
+        failed = []
         for p in args.paths:
             try:
+                if not os.path.exists(p):
+                    raise OSError("missing")
                 os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)
-            except OSError:
-                pass
-        print(json.dumps({"restricted": args.paths}))
-        return 0
+                restricted.append(p)
+            except OSError as exc:
+                failed.append({"path": p, "error": str(exc)})
+        print(json.dumps({"restricted": restricted, "failed": failed}))
+        return 1 if failed else 0
 
     if args.cmd == "decide":
         line = {"date": dt.datetime.now(dt.timezone.utc).date().isoformat(), "run_dir": args.run_dir, "id": args.id,
