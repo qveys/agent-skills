@@ -2,7 +2,7 @@
 name: ai-ready
 license: MIT
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
 description: "**ANALYSIS SKILL** — Analyze any repository and generate AI-ready configuration — AGENTS.md, copilot-instructions.md, skills, CI workflows, issue templates. WHEN: \"make this repo ai-ready\", \"set up AI config\", \"add copilot instructions\", \"prepare this repo for AI contributions\", \"generate AGENTS.md\". INVOKES: glob, grep, view, create, edit for repo analysis and file generation. FOR SINGLE OPERATIONS: use create/edit directly for individual config files."
 ---
 
@@ -220,6 +220,8 @@ This skill's first obligation is to leave the repo in a **better state than it f
 
 - **NEVER create duplicates** — before creating any file, check ALL known locations (canonical, legacy, and root). If a file exists anywhere, do not create another copy. Consolidate instead.
 - **NEVER push directly to main/master** — always create a feature branch and open a PR for review. The only exception is if the user explicitly asks to commit to the default branch.
+- **NEVER leave an opened PR unattended** — once a PR is open and CI passes, either merge it (small, well-tested, no ambiguous judgment calls) or ask the user which way to go; report the outcome either way. Opening a PR and going quiet is not acceptable. If CI is red or still pending, don't merge — fix it, wait, or report the blocker instead.
+- **Whenever a merge happens, use squash and delete the branch afterward** — both local and remote. Don't leave merged branches lying around.
 - **NEVER overwrite existing files** — only create missing assets. Flag drift for user review.
 - **NEVER delete files without user approval** — if consolidating duplicates or removing stale files, include the deletion in the PR for review.
 
