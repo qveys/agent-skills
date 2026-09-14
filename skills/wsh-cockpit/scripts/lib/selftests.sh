@@ -267,14 +267,78 @@ cmd_selftest_live() {
     report_live_case "11 step-run" 1 "rc=$rc want=3, missing step banner label and/or command output"
   fi
 
-  # 12. stop kills the session and removes its seq file
+  # 12. `--pre`-style staged-but-not-yet-hopped scenario (regression test for
+  # the real bug: pre_push_helpers used to flip remote_mode ON as soon as
+  # helpers were staged, before the pane had actually hopped — so the very
+  # next send, the hop itself, tried to source a "remote" path on a still-
+  # local pane and failed with "no such file or directory"). Seeds the exact
+  # state pre_push_helpers leaves (remote_host_set/remote_helper_path_set,
+  # remote_mode left OFF) with no real network involved; a local shell
+  # function stands in for `ssh` so the "hop" never touches the network, and
+  # the "remote" path is the real local default helper file so post-hop
+  # sourcing genuinely succeeds once remote_mode flips ON. Same tmux-only
+  # limitation as checks 9-10 (remote_mode_set is a no-op under zellij).
+  if [ "$MUX" != tmux ]; then
+    echo "skip 12 pre-staged hop framing (backend $MUX — no per-session option store)"
+  else
+    local default_sep_helper rc_a rc_b out_a out_b flat_a flat_b
+    default_sep_helper=$(sep_ensure_helpers)
+    remote_host_set "$SESS" "fake-e2e-host"
+    remote_helper_path_set "$SESS" sep "$default_sep_helper"
+
+    set +e
+    "$0" send "ssh() { printf 'FAKE_SSH_HOP_TO:%s\n' \"\$1\"; }" "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    "$0" send 'ssh fake-e2e-host' "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    rc_a=$?
+    set -e
+    # `read`, not `output`: the raw typed prefix (the sourcing form or the
+    # inline block) is echoed as pane input BEFORE the __wsh-rendered banner
+    # even starts — `output` only isolates the rendered banner segment, which
+    # never shows that prefix either way. The inline form never calls __wsh
+    # at all (sep_wrap_inline wraps the raw command directly in `{ cmd; }`),
+    # so its presence/absence of `{ ssh fake-e2e-host; }` is what distinguishes
+    # it from the sourcing form's `. '<path>' && __wsh 'N' 'ssh fake-e2e-host'`
+    # — command text is unique enough in this session that scrollback from
+    # earlier cases can't produce a false match.
+    out_a=$("$0" read "$SESS" 80 2>&1 | tr -d '\r')
+    flat_a=$(printf '%s' "$out_a" | tr -d '\n')
+
+    set +e
+    "$0" send 'echo POST_HOP_MARK' "$SESS" >/dev/null 2>&1
+    "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    rc_b=$?
+    set -e
+    out_b=$("$0" read "$SESS" 80 2>&1 | tr -d '\r')
+    flat_b=$(printf '%s' "$out_b" | tr -d '\n')
+
+    if [ "$rc_a" -eq 0 ] \
+       && printf '%s' "$flat_a" | grep -Fq '{ ssh fake-e2e-host; }' \
+       && printf '%s' "$out_a" | grep -Fq 'FAKE_SSH_HOP_TO:fake-e2e-host' \
+       && ! printf '%s' "$flat_a" | grep -Eq "__wsh '[0-9]+' 'ssh fake-e2e-host'" \
+       && [ "$rc_b" -eq 0 ] \
+       && printf '%s' "$flat_b" | grep -Fq ". '${default_sep_helper}' && __wsh '" \
+       && printf '%s' "$flat_b" | grep -Fq "'echo POST_HOP_MARK'" \
+       && printf '%s' "$out_b" | grep -Fq 'POST_HOP_MARK'; then
+      report_live_case "12 pre-staged hop framing" 0
+    else
+      report_live_case "12 pre-staged hop framing" 1 "rc_a=$rc_a rc_b=$rc_b — hop send must be inline (no sourcing of staged path) and flip remote_mode; post-hop send must use the staged path"
+    fi
+
+    remote_helper_path_clear "$SESS" sep
+    remote_host_clear "$SESS"
+    remote_mode_set "$SESS" 0 >/dev/null 2>&1 || true
+  fi
+
+  # 13. stop kills the session and removes its seq file
   "$0" stop "$SESS" >/dev/null 2>&1 || true
   if mux_has "$SESS"; then
-    report_live_case "12 stop" 1 "session '$SESS' still alive"
+    report_live_case "13 stop" 1 "session '$SESS' still alive"
   elif [ -f "$SEQF" ]; then
-    report_live_case "12 stop" 1 "seq file still present: $SEQF"
+    report_live_case "13 stop" 1 "seq file still present: $SEQF"
   else
-    report_live_case "12 stop" 0
+    report_live_case "13 stop" 0
   fi
 
   if [ "$failures" -ne 0 ]; then
@@ -754,6 +818,38 @@ cmd_selftest_oneshot_ssh() {
 
   rm -f "$F" 2>/dev/null || true
 
+  # 9-12. ssh_hop_targets_host: the `--pre` hop-detection used by `send`'s
+  # framing decision (wsh-live.sh) to force inline framing for the ONE send
+  # that actually performs a pre-staged hop. Pure pattern match, no tmux/
+  # network needed — same spirit as cases 1-5 above.
+  if ssh_hop_targets_host 'tailscale ssh vps-dokploy 2>&1' vps-dokploy; then
+    report_oneshot_case "9 hop matches interactive tailscale ssh to staged host" 0
+  else
+    report_oneshot_case "9 hop matches interactive tailscale ssh to staged host" 1
+  fi
+
+  if ssh_hop_targets_host 'ssh vps-dokploy' vps-dokploy; then
+    report_oneshot_case "10 hop matches bare interactive ssh to staged host" 0
+  else
+    report_oneshot_case "10 hop matches bare interactive ssh to staged host" 1
+  fi
+
+  # does NOT match: wrong host (deviating from the pre-staged --pre target).
+  if ssh_hop_targets_host 'ssh other-host' vps-dokploy; then
+    report_oneshot_case "11 hop no match on different host" 1 "flagged a hop to an un-staged host"
+  else
+    report_oneshot_case "11 hop no match on different host" 0
+  fi
+
+  # does NOT match: one-shot inline form (runs remotely and returns
+  # immediately — the pane's own shell never leaves the Mac, so it must not
+  # be treated as the hop that flips remote_mode).
+  if ssh_hop_targets_host "tailscale ssh vps-dokploy 'echo hi' 2>&1" vps-dokploy; then
+    report_oneshot_case "12 hop no match on one-shot inline form" 1 "flagged a one-shot inline command as the hop"
+  else
+    report_oneshot_case "12 hop no match on one-shot inline form" 0
+  fi
+
   if [ "$failures" -ne 0 ]; then
     echo "selftest-oneshot-ssh: $failures failure(s)" >&2
     exit 1
@@ -1046,11 +1142,11 @@ cmd_selftest_guard() {
     echo "selftest-guard: skip (tmux-only — the guard rests on tmux display-message)"
     return 0
   fi
-  # M4 (docs/gotchas.md): this runs on the DEFAULT tmux server, not an
+  # M4 (docs/internals.md): this runs on the DEFAULT tmux server, not an
   # isolated one — case 10 groups a throwaway session onto whatever real
   # session is currently running this selftest. Warn up front so a reader
   # of the output (not just the source) sees it before it happens.
-  echo "selftest-guard: note — runs on the default tmux server; case 10 briefly groups a throwaway session onto this call's own live session (see docs/gotchas.md)"
+  echo "selftest-guard: note — runs on the default tmux server; case 10 briefly groups a throwaway session onto this call's own live session (see docs/internals.md)"
   # NOT local: cleanup runs from the EXIT trap after this function returned
   # (same rationale as cmd_selftest_gc's SESS).
   GUARD_BUSY="cockpit-selftest-guard-busy-$$"
@@ -1437,7 +1533,7 @@ cmd_selftest_guard() {
   # 19 (I2, Task 7). `stop` hands its raw argument straight to
   # teardown_session with no mux_has check of its own — before the fix,
   # its six unanchored `tmux set-option -u -t "$sess"` calls resolved a bare
-  # PREFIX just like `set-option` always does (see docs/gotchas.md), so a
+  # PREFIX just like `set-option` always does (see docs/internals.md), so a
   # prefix that only happens to match a live NEIGHBOUR session silently
   # wiped that neighbour's remote-mode options while the anchored
   # `mux_kill` right after correctly refused to kill anything. Reproduces
@@ -1532,7 +1628,7 @@ cmd_selftest_guard() {
   # WARNING FOR ANYONE RUNNING THIS BY HAND: before the guard exists, this
   # case actually KILLS the tmux session it runs inside — never run
   # selftest-guard from your real controlling terminal (see the module-wide
-  # note this function prints, and docs/gotchas.md).
+  # note this function prints, and docs/internals.md).
   if [ -n "${TMUX:-}" ]; then
     own=$(own_tmux_session)
     set +e
@@ -1646,7 +1742,7 @@ cmd_selftest_guard() {
   # case actually TYPES 'echo lot2-guard-marker' into the tmux session
   # running this very selftest — an inert marker either way, but real:
   # never run selftest-guard from a terminal you'd notice text appearing
-  # in (see the module-wide note this function prints, and docs/gotchas.md).
+  # in (see the module-wide note this function prints, and docs/internals.md).
   if [ -n "${TMUX:-}" ]; then
     own=$(own_tmux_session)
     set +e
@@ -2943,7 +3039,7 @@ cmd_selftest_adopt() {
 
   # 29. Prédicate pure sur la dernière ligne capturée (mitigation
   #     best-effort spec §2, mesurée sur le vrai prompt de la machine — voir
-  #     docs/gotchas.md) : prompt nu (avec ou sans décoration RPROMPT) →
+  #     docs/internals.md) : prompt nu (avec ou sans décoration RPROMPT) →
   #     adoptable ; prompt + texte tapé → refusé ; ligne inclassable (thème
   #     de prompt non reconnu, scrollback quelconque) → adoptable (jamais de
   #     blocage sur une forme qu'on ne sait pas classer).
@@ -2999,7 +3095,7 @@ cmd_selftest_adopt() {
   # above (mux_send_line's Enter would submit the GARBLED result), and
   # wait-done's 60s timeout would still make this case superficially "pass"
   # for the wrong reason (measured while writing this case, see
-  # docs/gotchas.md). A well under a minute completion proves the gate fired
+  # docs/internals.md). A well under a minute completion proves the gate fired
   # first, never touching the probe.
   SECONDS=0
   set +e; try_adopt_session "" ""; rc30=$?; set -e
@@ -3666,4 +3762,127 @@ cmd_selftest_attach() {
   trap - EXIT
   if [ "$failures" -eq 0 ]; then echo "selftest-attach: all cases passed"; return 0
   else echo "selftest-attach: $failures failure(s)" >&2; return 1; fi
+}
+
+# ---------------------------------------------------------------------------
+# selftest-docs — consistency + token-budget gate for the skill's own docs.
+#
+# Why this exists: SKILL.md is context every single invocation pays for, and it
+# went 0 -> 298 lines in two commits with the same rule written up to four
+# times. The `budget` case is the ratchet that keeps a slim-down from silently
+# regrowing; `internals-unreferenced` is the one that matters most — the moment
+# docs/internals.md gets referenced from SKILL.md, the tmux forensics re-enter
+# the agent's load path and the whole gain is cancelled.
+#
+# Pure file reads: no tmux server, no cockpit, no side effects, well under a
+# second. Unlike selftest-guard it is therefore safe to run from inside a
+# cockpit session that matters.
+cmd_selftest_docs() {
+  local root failures=0
+  root="$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)"
+
+  docs_fail() { echo "FAIL $1: $2" >&2; failures=$((failures + 1)); }
+
+  # --- coverage: no subcommand lost while trimming SKILL.md ---------------
+  # Ceiling: whole-word match anywhere in SKILL.md, not "appears in the command
+  # table". Loose on purpose — it cannot false-fail, and the regression it
+  # guards against is a subcommand dropped entirely, which it does catch.
+  local sub missing=""
+  for sub in $(awk '/^case "\$sub" in/,/^esac/' "$root/scripts/wsh-live.sh" \
+                 | grep -oE '^[a-z][a-z-]*\)' | tr -d ')' \
+                 | grep -v '^selftest-' | sort -u); do
+    grep -Fwq -- "$sub" "$root/SKILL.md" || missing="$missing $sub"
+  done
+  if [ -n "$missing" ]; then
+    docs_fail coverage "subcommand(s) absent from SKILL.md:$missing"
+  else
+    echo "ok coverage"
+  fi
+
+  # --- links: every referenced doc exists ---------------------------------
+  # Scope: SKILL.md, the operational docs/*.md, and the scripts. Deliberately
+  # NOT docs/plans/ or execution/ — those are archival and legitimately cite
+  # specs that live outside this repo.
+  local ref dead=""
+  for ref in $(grep -rhoE 'docs/[a-z0-9-]+\.md' \
+                 "$root/SKILL.md" "$root"/docs/*.md "$root"/scripts/*.sh \
+                 "$root"/scripts/lib/*.sh 2>/dev/null | sort -u); do
+    [ -f "$root/$ref" ] || dead="$dead $ref"
+  done
+  if [ -n "$dead" ]; then
+    docs_fail links "referenced but missing:$dead"
+  else
+    echo "ok links"
+  fi
+
+  # --- internals-unreferenced: keep the forensics out of the load path ----
+  if [ ! -f "$root/docs/internals.md" ]; then
+    docs_fail internals-unreferenced "docs/internals.md is missing (it is where tmux forensics belong)"
+  elif grep -Fq 'internals.md' "$root/SKILL.md"; then
+    docs_fail internals-unreferenced "SKILL.md references docs/internals.md — that re-adds ~4700 tok to every invocation"
+  else
+    echo "ok internals-unreferenced"
+  fi
+
+  # --- budget: the anti-regrowth ratchet ----------------------------------
+  # Caps sit ~15% above the 2026-09 slim-down targets so an ordinary edit does
+  # not trip them. Raising a cap is a deliberate decision, not a reflex.
+  local skill_max=7300 gotchas_max=9000 docs_max=34000
+  local skill_bytes gotchas_bytes docs_bytes=0 f
+  skill_bytes=$(wc -c < "$root/SKILL.md" | tr -d ' ')
+  gotchas_bytes=$(wc -c < "$root/docs/gotchas.md" | tr -d ' ')
+  for f in "$root"/docs/*.md; do
+    case "$f" in *internals.md) continue ;; esac
+    docs_bytes=$((docs_bytes + $(wc -c < "$f" | tr -d ' ')))
+  done
+  local over=""
+  [ "$skill_bytes"   -le "$skill_max"   ] || over="$over SKILL.md=${skill_bytes}>${skill_max}"
+  [ "$gotchas_bytes" -le "$gotchas_max" ] || over="$over gotchas.md=${gotchas_bytes}>${gotchas_max}"
+  [ "$docs_bytes"    -le "$docs_max"    ] || over="$over docs/total=${docs_bytes}>${docs_max}"
+  if [ -n "$over" ]; then
+    docs_fail budget "over cap (bytes):$over"
+  else
+    echo "ok budget (SKILL.md=${skill_bytes} gotchas.md=${gotchas_bytes} docs/total=${docs_bytes})"
+  fi
+
+  # --- rules: every non-negotiable rule still has a home in SKILL.md ------
+  # Sentinels are flag/command/env tokens, never French prose: they cannot
+  # change without the script changing too. A false positive here is fixed by
+  # adjusting the sentinel, not by deleting the case.
+  local tok absent=""
+  for tok in '--situate' '--pre' '--force' '2>&1' 'wait-done' 'base64' \
+             'release' 'WSH_COCKPIT_AGENT' 'WSH_COCKPIT_ADOPT' 'output' 'step-run'; do
+    grep -Fq -- "$tok" "$root/SKILL.md" || absent="$absent $tok"
+  done
+  if [ -n "$absent" ]; then
+    docs_fail rules "rule sentinel(s) missing from SKILL.md:$absent"
+  else
+    echo "ok rules"
+  fi
+
+  # --- gotchas-headings: never go back to a 354-line flat file ------------
+  local heads
+  heads=$(grep -c '^## ' "$root/docs/gotchas.md" || true)
+  if [ "$heads" -lt 14 ]; then
+    docs_fail gotchas-headings "only $heads '## ' heading(s) — a flat file forces reading all of it"
+  else
+    echo "ok gotchas-headings ($heads headings)"
+  fi
+
+  # --- no-dup: the internal duplication must not creep back ---------------
+  # These three tokens were each written 3-4 times in the pre-slim SKILL.md.
+  # Caps = post-slim count + 1 of headroom.
+  local dup="" n
+  for tok in '--situate:3' '--pre:4' 'wait-done:4'; do
+    n=$(grep -Fo -- "${tok%:*}" "$root/SKILL.md" | wc -l | tr -d ' ')
+    [ "$n" -le "${tok##*:}" ] || dup="$dup ${tok%:*}=${n}>${tok##*:}"
+  done
+  if [ -n "$dup" ]; then
+    docs_fail no-dup "token(s) repeated past cap:$dup"
+  else
+    echo "ok no-dup"
+  fi
+
+  if [ "$failures" -eq 0 ]; then echo "selftest-docs: all cases passed"; return 0
+  else echo "selftest-docs: $failures failure(s)" >&2; return 1; fi
 }

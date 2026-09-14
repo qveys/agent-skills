@@ -480,7 +480,7 @@ adopt_state_allowed() {  # $1 pane_current_command string -> rc 0 if adoptable
 # pane_current_command only sees the pane's foreground PROCESS — a command
 # being TYPED but not yet run (no Enter pressed) is invisible to it, since
 # the foreground process is still the bare shell. Measured on the machine's
-# real prompt (session tmux jetable, see docs/gotchas.md): a zsh
+# real prompt (session tmux jetable, see docs/internals.md): a zsh
 # powerlevel-style prompt with a right-side segment (RPROMPT) pads the WHOLE
 # line out to the pane width and appends "─"+a corner glyph ("╮"/"╯") flush
 # right, unrelated to whether text was typed — a naive "any content at the
@@ -491,7 +491,7 @@ adopt_state_allowed() {  # $1 pane_current_command string -> rc 0 if adoptable
 # A last line that doesn't match either shape (a different prompt theme, an
 # empty capture, unrelated scrollback content) is UNRECOGNIZED and must NOT
 # refuse adoption: a false positive here would make a healthy cockpit
-# unadoptable, worse than the documented best-effort limit (docs/gotchas.md).
+# unadoptable, worse than the documented best-effort limit (docs/internals.md).
 adopt_last_line_busy() {  # $1 last non-blank captured pane line -> rc 0 if busy (refuse), rc 1 if idle/unrecognized (allow)
   local line="$1" body
   if [[ "$line" =~ ^(.*)[[:space:]]─+[╮╯]$ ]]; then
@@ -912,6 +912,33 @@ oneshot_ssh_is_inline() {
   [[ "$1" =~ ^(tailscale[[:space:]]+)?ssh[[:space:]].*[[:space:]][\"\'] ]]
 }
 
+# Does $1 (a `send` command) look like an INTERACTIVE ssh/tailscale-ssh hop
+# naming host $2 (no inline command — `ssh host`, not `ssh host 'cmd'`)?
+# Used by `send`'s framing decision to recognize THE ONE command that
+# actually performs a `--pre`-staged hop — before that send runs, the pane is
+# still local regardless of remote_mode, so it must be framed inline even
+# though helpers are already staged remotely. Deliberately excludes the
+# one-shot inline form (oneshot_ssh_is_inline): `ssh host 'cmd'` runs
+# remotely and returns immediately — the pane's own shell never leaves the
+# Mac, so it must NOT flip remote_mode.
+ssh_hop_targets_host() {
+  local cmd="$1" host="$2" word
+  [ -n "$host" ] || return 1
+  [[ "$cmd" =~ ^(tailscale[[:space:]]+)?ssh[[:space:]] ]] || return 1
+  oneshot_ssh_is_inline "$cmd" && return 1
+  set -f
+  for word in $cmd; do
+    case "$word" in
+      "$host" | *"@$host")
+        set +f
+        return 0
+        ;;
+    esac
+  done
+  set +f
+  return 1
+}
+
 # Update the per-session consecutive-count and warn from the 2nd match on.
 # $1 sess $2 cmd — no return value; state file write is the only side effect
 # besides the optional stderr line.
@@ -951,7 +978,7 @@ teardown_session() {
     # `stop` (wsh-live.sh) hands its raw argument straight to this function
     # with no mux_has check of its own — so $sess can be a bare PREFIX, not
     # the exact session name. `set-option` rejects "=" and resolves by
-    # PREFIX instead (measured — see docs/gotchas.md's I1/I2 gotchas), so
+    # PREFIX instead (measured — see docs/internals.md's I1/I2 gotchas), so
     # unlike the anchored `mux_kill` below, the six set-option calls used to
     # run against whatever session $sess happened to prefix-match — wiping
     # a live NEIGHBOUR's remote-mode options while `mux_kill` correctly (and
