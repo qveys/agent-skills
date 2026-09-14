@@ -135,6 +135,32 @@ fait **jamais** échouer l'appel. **Un seul hop :** re-hopper vers un TROISIÈME
 hôte n'est pas suivi, le framing y repasse en inline (toujours correct, juste pas
 optimisé).
 
+**Descendre d'une couche de plus — un conteneur Docker.** Un `docker exec <c>
+bash`/`docker compose exec <c> bash` dans une session déjà hoppée est une couche
+que le fichier helper poussé pour la couche du dessus (hôte ou Mac) n'atteint
+pas : `send`/`banner` continuent d'émettre la forme courte `. '<chemin>' &&
+__wsh ...` inchangée, mais `<chemin>` n'existe pas dans le conteneur — le
+sourcing échoue (`No such file or directory`, footer perdu — voir
+`docs/gotchas.md`). Pas de repli inline ici : le fix est de faire exister le
+MÊME chemin une couche plus bas :
+
+```bash
+scripts/wsh-live.sh remote-init --container <container> "$SESS"
+```
+
+Copie les fichiers helper sep/step dans `<container>` au **même chemin absolu**
+déjà enregistré pour la session (celui du remote-init hôte, ou le répertoire
+local `~/.cache/wsh-cockpit/helpers/` si le pane n'a jamais quitté le Mac) —
+chemin identique, donc `send`/`banner` ne changent en rien : étape de transfert
+de fichiers uniquement, pas de nouveau mode de framing. Le transport
+(`docker exec <c> mkdir -p` puis `docker cp` par fichier) tourne **hors pane**,
+sur l'hôte où le pane se trouve réellement (`tailscale ssh` si distant, en local
+sinon) — même rationale que `push`/`pull`, ne compte pas pour l'avertissement
+one-shot SSH. Best-effort : `docker`/`tailscale` manquant ou conteneur
+injoignable → avertissement stderr et retour non nul, jamais de hard fail —
+mais volontairement **pas de repli inline** pour ce cas (voir SKILL.md
+« Descendre d'une couche »).
+
 **ControlMaster sur le hop lui-même.** Pour un hop OpenSSH (pas `tailscale ssh`,
 qui ne le supporte pas), envoie-le avec le multiplexage activé :
 
