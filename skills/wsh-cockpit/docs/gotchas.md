@@ -35,6 +35,28 @@ réutiliser la session explicitement (`SESSION=…`). Détail :
 `docs/internals.md` → "Adoption d'une session laissée mid-ssh
 (`WSH_COCKPIT_ADOPT`)".
 
+## `docker exec` est une couche de plus que les helpers poussés n'atteignent pas
+
+Symptôme : `No such file or directory` sur le fichier helper juste après le hop
+conteneur, footer `exit` disparu. `remote-init <host>`/`--pre` poussent les
+helpers sur l'HÔTE ; une fois le pane dans `docker exec <c> bash` (ou
+`docker compose exec`), le chemin n'existe pas dans le conteneur. Fix :
+`remote-init --container <container> [session]` — copie les mêmes fichiers au
+même chemin absolu, la forme courte de `send`/`banner` repart sans changement.
+**Pas de repli inline** pour ce cas (workflow réel, rejeté explicite — voir
+`docs/framing-and-transfer.md` → "Descendre d'une couche de plus"). Best-effort :
+`docker`/`tailscale` manquant ou conteneur injoignable → warning stderr, retour
+non nul, jamais de hard fail. Couvert par `selftest-live` cases 14a-14c.
+
+## `remote-init "$sess"` sans hôte purge maintenant les chemins helpers périmés
+
+Avant, la forme sans hôte basculait juste le flag sticky sans vider un éventuel
+chemin helper remote enregistré par un `remote-init <host>` antérieur sur la
+même session — le mode "inline-only" n'était pas réellement inline : `send`
+continuait de sourcer l'ancien chemin (possiblement injoignable). Corrigé : la
+branche sans hôte appelle le même `remote_helper_paths_clear` que `local-init`
+avant de poser le flag. Couvert par `selftest-live` case 13.
+
 ## Never start cockpit blindly
 
 Another agent may already own that tmux session. Use `spawn` to open/continue
