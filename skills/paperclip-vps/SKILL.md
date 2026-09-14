@@ -12,7 +12,7 @@ Connect with `tailscale ssh vps-openclaw` (or `ssh vps-openclaw` when the host k
 - Container: **`paperclip`** (image `paperclip:local`, built from `/docker/paperclip` via `make build`), API on `100.100.10.60:3100`, UI served same port. Older notes saying `paperclip-paperclip-1` are stale. Unrelated sidecars on the same host: `paperclip-bef-paperclip-1`, `paperclip-bef-hindsight-1`.
 - **No direct egress**: `paperclip` sits alone on the Docker network `internal` (172.16.4.2) with no external DNS. Everything outbound goes through `squid-proxy-squid-1` via `HTTP(S)_PROXY=http://squid:3128` + `NODE_OPTIONS=--use-env-proxy`. A `fetch` that skips those vars dies on `getaddrinfo EAI_AGAIN`, not on a timeout.
 - **No app-data bind mount.** The only bind is `./data/.config/github-app:/paperclip/.config/github-app:ro`. Application data lives on the named volume mounted at `/app/data` (see Patch infrastructure).
-- **The code that actually RUNS is the repo build under `/app`** — PID 1 is `node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js`, running as uid 1000 (`node`), and the live logic is `/app/server/dist/services/*.js` (compiled from `/app/server/src`). Verified 2026-09-10: `grep 'is not a git checkout' /usr/local/lib/node_modules/paperclipai` returns nothing, `/app/server/dist/services/heartbeat.js` has it. The older claim that the global install `/usr/local/lib/node_modules/paperclipai/` is PID 1 is **stale** — check before patching. **For server logic the patch target is `/app/server/dist/`**, the tree PID 1 actually loads (`make build` recompiles it from `/app/server/src`); patching any other copy leaves the running server on the old code. The global install and the npx caches under `/paperclip/.npm/_npx/<hash>/node_modules/@paperclipai/*` (11 hashes exist) matter only for packages genuinely loaded from them — reading code there is fine, but a patch there does not reach the server. Don't repeat the mistake of patching a copy the process never loads.
+- **The code that actually RUNS is the repo build under `/app`** — PID 1 is `node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js`, running as uid 1000 (`node`), and the live logic is `/app/server/dist/services/*.js` (compiled from `/app/server/src`). Verified 2026-09-10: `grep 'is not a git checkout' /usr/local/lib/node_modules/paperclipai` returns nothing, `/app/server/dist/services/heartbeat.js` has it. The older claim that the global install `/usr/local/lib/node_modules/paperclipai/` is PID 1 is **stale** — check before patching. **For server logic the durable fix is the repo's `/docker/paperclip/server/src/` plus a rebuild (`make build`).** `/app/server/dist/` is the tree PID 1 actually loads, but `/app` is **not** a bind mount: an edit made there is gone on the next `--force-recreate`, and because the checked-out `/app/server/src` can be older than the built `dist`, a blind `make build` can replace a live fix with older code. So land the change in `/docker/paperclip` and rebuild — treat a direct in-container edit as **emergency-only**, never as the record of the fix. Patching the global install or the npx caches leaves the running server on the old code entirely. The global install and the npx caches under `/paperclip/.npm/_npx/<hash>/node_modules/@paperclipai/*` (11 hashes exist) matter only for packages genuinely loaded from them — reading code there is fine, but a patch there does not reach the server. Don't repeat the mistake of patching a copy the process never loads.
 
 ## Plugins (worker processes)
 - Installed plugins live on the volume: `/paperclip/.paperclip/plugins/node_modules/<pkg>/dist/{manifest,worker}.js`. One forked worker per plugin, visible in `/proc/*/cmdline` (`docker exec --privileged -u root` is needed to read `/proc/<pid>/environ`).
@@ -89,18 +89,27 @@ Do not start with a new patch. For adapter_failed / models-not-loading, inspect 
 - **It is systematic, not intermittent** (2/2 captured probes failed). Apparent "bursts" are just when heartbeats run. It breaks *every* git-sensitive run, and every `execFile(...).stdout` reader — including the materialization `git clone`, which explains the `git_worktree_base_materialization_failed` entries too.
 - **Fix applied 2026-09-10** — normalize once, at the definition, in both `services/heartbeat.ts` and `services/git-credentials.ts`, rather than patching each call site:
   ```ts
-  const execFilePromisified = promisify(execFileCallback);
-  // `promisify()` resolves the *first callback value* when the custom symbol is
-  // missing, so normalize the shape here — but carry the `.child` handle across,
-  // or callers lose process cancellation. Rejections pass through untouched.
+  // Do not build this on `promisify(execFileCallback)`: without the custom
+  // symbol that promise resolves the first callback *value* (stdout as a plain
+  // string) and exposes no `.child` at all — so normalizing the shape afterwards
+  // cannot restore cancellation, because there is nothing to copy.
+  // Drive the callback API directly instead: the ChildProcess comes back from the
+  // call itself, so the promise always carries it.
   const execFile = ((...args: unknown[]) => {
-    const p = execFilePromisified(...args) as Promise<unknown> & { child?: unknown };
-    const normalized = p.then((result) =>
-      typeof result === "string" ? { stdout: result, stderr: "" } : result,
-    ) as Promise<unknown> & { child?: unknown };
-    if (p.child !== undefined) normalized.child = p.child;
-    return normalized;
-  }) as unknown as typeof execFilePromisified;
+    type Child = { kill?: (s?: unknown) => unknown };
+    let child: Child | undefined;
+    const promise = new Promise((resolve, reject) => {
+      child = (execFileCallback as unknown as (...a: unknown[]) => Child)(
+        ...args,
+        // execFile attaches stdout/stderr to the error, so rejecting with it keeps
+        // the rejected-path contract identical.
+        (err: unknown, stdout: string, stderr: string) =>
+          err ? reject(err) : resolve({ stdout, stderr }),
+      );
+    }) as Promise<{ stdout: string; stderr: string }> & { child?: Child };
+    if (child !== undefined) promise.child = child;
+    return promise;
+  }) as unknown as typeof execFileCallback;
   ```
 - **Still unexplained**: *what* strips the symbol. No module under `node_modules` reassigns `execFile` or touches `promisify.custom`; plugins never reference `child_process`. Outside the server process — same container, same uid, CJS and ESM, with and without the tsx loader — the symbol is present (`custom=function`). Treat any new `promisify(<node callback API>)` in this codebase as suspect.
 - **Debugging recipe that worked**: poll the workspace at 1 Hz while grepping the logs for the failure timestamp. Seeing the workspace healthy at the exact second the server declares it broken is what rules out the filesystem and points at the probe.
