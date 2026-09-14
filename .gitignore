@@ -31,3 +31,4 @@ pnpm-debug.log*
 # graphify
 graphify-out/
 .tokensave
+.aider*
