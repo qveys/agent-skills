@@ -166,3 +166,4 @@ docker-compose.override.yml
 # ── Local tooling output (pre-existing entries, kept) ────────────────────────
 graphify-out/
 .tokensave
+.aider*
