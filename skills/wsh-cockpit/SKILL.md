@@ -68,7 +68,9 @@ scripts/wsh-live.sh gc [--dry-run] [--idle=SECONDS] [--only-session=NAME]  # swe
 scripts/wsh-live.sh web {start|stop|status} [session] # browser view via ttyd, read-only by default
 scripts/wsh-live.sh push <session> <local> <remote>  # file transfer out; host deduced from remote-init
 scripts/wsh-live.sh pull <session> <remote> <local>  # file transfer in
-scripts/wsh-live.sh remote-init [session] [host]  # after an ssh hop: push helpers to [host]
+scripts/wsh-live.sh remote-init [session] [host]  # after an ssh hop: push helpers to [host] (sticky inline-only without it)
+scripts/wsh-live.sh remote-init --pre <host> [session]  # RECOMMENDED when <host> is known: push helpers BEFORE the hop
+scripts/wsh-live.sh remote-init --container <container> [session]  # after `docker exec`: copy helpers into the container, same path
 scripts/wsh-live.sh local-init  [session]  # revert remote-init
 scripts/wsh-step.sh {header|phase|step|done|cmd|defs} # renderer / one-liner / pane-side fn defs
 ```
@@ -115,6 +117,61 @@ $COCKPIT send 'exit' "$SESS"              # retour au Mac en fin de travail
 
 Un one-shot `ssh <host> '<cmd> 2>&1'` reste légitime pour un diagnostic ponctuel
 (1-2 commandes), jamais comme mode de travail : `send` avertit dès le 2e.
+
+### Transférer des fichiers — **jamais base64/cat dans `send`**
+
+Séparer transfert et exécution. **Quand le pane est en session SSH**, la voie
+officielle est `push`/`pull` (l'hôte est déduit de `remote-init`/`--pre` —
+jamais à redonner à la main) :
+
+```bash
+$COCKPIT push "$SESS" ./local-file.md /remote/absolute/path.md   # local -> remote
+$COCKPIT pull "$SESS" /remote/absolute/path.log ./local-copy.log # remote -> local
+```
+
+Ordre de transport (choisi automatiquement, annoncé sur stderr) : `wsh file
+cp` → le socket `ControlMaster` de la session (zéro ré-auth — voir ci-dessus)
+→ `tailscale ssh` → `scp` nu en dernier recours. Ces transports tournent hors
+pane depuis le shell agent : ils ne comptent **jamais** pour l'avertissement
+one-shot SSH (qui ne surveille que `send`).
+
+Hors session SSH (local → local, ou hôte connu sans passer par une session
+cockpit), `scripts/wsh-push.sh` (ou `wsh file cp`) reste utilisable
+directement. Détails : `docs/framing-and-transfer.md`.
+
+### Descendre d'une couche — conteneur
+
+Une fois DANS la session SSH, un `docker exec <c> bash`/`docker compose exec
+<c> bash` descend encore d'une couche : les helpers de la couche du dessus
+(hôte distant, ou ce Mac) ne sont plus atteignables depuis le conteneur — le
+`send` suivant continue d'émettre la forme courte `. '<chemin>' && ...` mais
+`<chemin>` n'existe pas dans le conteneur (`No such file or directory`,
+footer `exit` perdu). Appelle `remote-init --container <container>` juste
+après le `docker exec` — **pas de repli inline** ici :
+
+```bash
+$COCKPIT send 'docker compose exec paperclip bash' "$SESS"
+$COCKPIT remote-init --container paperclip "$SESS"
+# ... la forme courte de send/banner marche à nouveau, chemin inchangé ...
+```
+
+`paperclip` ci-dessus est le **nom du conteneur** — ce que `docker exec`/`docker cp`
+exigent. Si le nom du service Compose diffère du conteneur, résous-le par le service,
+jamais par `docker ps --filter name=` (filtre **sous-chaîne** : `name=paperclip` rend
+aussi `paperclip-bef-paperclip-1`), et exige **un seul** conteneur — depuis le
+répertoire du projet Compose, sinon `docker compose ps` ne voit pas le service :
+
+```bash
+ids=$(docker compose ps --status running -q <service>)
+count=$(printf '%s\n' "$ids" | grep -c .)
+[ "$count" -eq 1 ] || { echo "attendu 1 conteneur, trouvé $count" >&2; exit 1; }
+name=$(docker inspect --format '{{.Name}}' "$ids" | sed 's#^/##')
+$COCKPIT remote-init --container "$name" "$SESS"
+```
+
+Copie les mêmes fichiers helper au même chemin absolu déjà enregistré pour la
+session — `send`/`banner` n'ont rien à changer. Détail (transport, cas
+local/distant) : voir `docs/framing-and-transfer.md`.
 
 ## Nettoyage
 
