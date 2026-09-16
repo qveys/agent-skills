@@ -147,6 +147,32 @@ Only after `Connectivity probe: ok` → send the next step (`infer`, `agent`,
 etc.). OpenClaw also supports `openclaw gateway restart --wait 45s` when run
 as one command.
 
+## `sudo` ne reçoit pas le TTY à travers le framing de `send`
+
+Symptôme (mesuré 2026-09-16 sur vps-openclaw) : `send 'sudo rm -rf /chemin 2>&1'`
+affiche bien `[sudo] password for <user>:` puis échoue **immédiatement** avec
+`sudo: a password is required`, footer `exit 1` — sans jamais laisser à
+l'utilisateur le temps de taper quoi que ce soit. La commande cadrée est exécutée
+dans un contexte dont l'entrée standard n'est pas le terminal du pane, donc `sudo`
+lit EOF au lieu du mot de passe. Le `keys` d'appoint décrit plus haut n'y change
+rien : le processus est déjà mort quand on pourrait alimenter son entrée.
+
+Deux voies propres, jamais de saisie du mot de passe par l'agent :
+
+```bash
+# 1) envoyer la commande SANS framing — elle est tapée brute au prompt et hérite du TTY
+WSH_LIVE_SEP=0 scripts/wsh-live.sh send 'sudo <cmd>' "$SESS"
+# contrepartie : pas de footer exit. Vérifier le résultat par un send cadré ensuite.
+
+# 2) demander à l'utilisateur de la taper lui-même dans le pane (il le regarde déjà)
+```
+
+Corollaire : **ne jamais `wait-done` sur un `sudo` cadré** en croyant qu'il attend
+une saisie — il a déjà rendu la main en échec. Vérifier l'état réel avec `read`
+avant de conclure. Et si le pane se retrouve dans un shell root (`su` tapé par
+l'utilisateur), il faut **deux** `exit` pour revenir au Mac : un pour quitter root,
+un pour quitter le ssh.
+
 ## Toujours terminer la commande `send`/`rexec` par `2>&1`
 
 Non négociable. L'utilisateur **EXIGE de voir le footer `└─[#N] exit <code>`
