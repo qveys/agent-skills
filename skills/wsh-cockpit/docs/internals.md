@@ -424,3 +424,54 @@ tmux, avec le même cœur de boucle : `spawn`/`start`/`send`/`read`/`wait-done`/
   `direct ≡ cmd ≡ defs`, bash+zsh, couleurs forcées).
 - **Documentation du skill** → `scripts/wsh-live.sh selftest-docs` (budget de
   tokens, couverture des sous-commandes, liens, règles impératives).
+
+## Rationale déplacée depuis `docs/gotchas.md`
+
+Ces passages expliquent *pourquoi* les pièges de `gotchas.md` existent. Ils ne sont
+pas nécessaires pour agir : l'opérationnel reste dans `gotchas.md`, qui pointe ici.
+
+**`docker exec` — une couche de plus.** `remote-init <host>`/`--pre` poussent les
+helpers sur l'HÔTE ; une fois le pane dans `docker exec <c> bash` (ou
+`docker compose exec`), ce chemin n'existe pas dans le conteneur, donc le sourcing
+échoue. C'est pourquoi `remote-init --container` copie les mêmes fichiers au même
+chemin absolu dans le conteneur, sans changement de forme côté `send`/`banner`.
+Best-effort assumé : `docker`/`tailscale` manquant ou conteneur injoignable →
+warning stderr, retour non nul, jamais de hard fail. Couvert par `selftest-live`
+cases 14a-14c. Détail transport : `docs/framing-and-transfer.md`.
+
+**`remote-init "$sess"` sans hôte — historique.** Avant, la forme sans hôte
+basculait juste le flag sticky sans vider un éventuel chemin helper remote
+enregistré par un `remote-init <host>` antérieur sur la même session : le mode
+« inline-only » n'était pas réellement inline, `send` continuait de sourcer
+l'ancien chemin, possiblement injoignable. Corrigé : la branche sans hôte appelle
+le même `remote_helper_paths_clear` que `local-init` avant de poser le flag.
+Couvert par `selftest-live` case 13.
+
+**Réutilisation par `spawn` — pourquoi elle n'est plus inconditionnelle.** Le lot
+registre/adoption (fiches 1.2-1.9, voir `docs/session-lifecycle.md` → « Opening a
+cockpit », étapes 1-4) a retiré la garantie « `spawn` sans `--force` réutilise
+toujours » : un `spawn` avec un préfixe explicite qui ne correspond à rien dans le
+registre, `WSH_COCKPIT_ADOPT` ou le scan legacy **crée une cockpit neuve** — un
+second onglet non demandé, exactement comme `--force`.
+
+**Attente du gateway — boucle inline complète.** L'option scriptée
+(`bash ~/wsh-gw-restart.sh 60`, déployée par `wsh-push.sh`) est préférée. Variante
+« une seule commande `send` », utile quand aucun helper ne peut être déployé :
+
+```bash
+$COCKPIT send '{ R=1; openclaw gateway restart && { EL=0; while [ $EL -lt 60 ]; do sleep 3; EL=$((EL+3)); if openclaw gateway status 2>&1 | grep -q "Connectivity probe: ok"; then echo READY:$EL; R=0; break; fi; echo waiting:$EL; done; }; openclaw gateway status 2>&1 | head -12; [ "$R" -eq 0 ]; } 2>&1'
+```
+
+`openclaw gateway restart --wait 45s` couvre le même cas en une commande. Ne pas
+enchaîner (`infer`, `agent`) avant `Connectivity probe: ok`.
+
+**Pourquoi `2>&1` est non négociable.** Si une commande écrit sur **stderr** et que
+stderr n'est pas redirigé, cette sortie peut arriver **après** le footer
+`└─[#N] exit <code>` du pane (ou hors de la fenêtre de `read`) : l'utilisateur croit
+alors que « les commentaires de fin d'exécution » manquent. `2>&1` fait fusionner
+stdout et stderr dans le pane **avant** l'impression du footer, qui reste donc
+fidèle et complet.
+
+**Mécanique de `wait-done`.** `wait-done` lit le compteur `@[wsh_seq]` posé par le
+dernier `send` et *poll* le pane tmux jusqu'au footer correspondant. Timeout par
+défaut 300 s (`WSH_WAIT_TIMEOUT`).

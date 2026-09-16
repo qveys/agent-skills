@@ -3942,7 +3942,17 @@ cmd_selftest_docs() {
   # --- budget: the anti-regrowth ratchet ----------------------------------
   # Caps sit ~15% above the 2026-09 slim-down targets so an ordinary edit does
   # not trip them. Raising a cap is a deliberate decision, not a reflex.
-  local skill_max=7300 gotchas_max=9000 docs_max=34000
+  #
+  # docs_max raised 34000 -> 36000 on 2026-09-16, deliberately, with the cost paid
+  # elsewhere: the container layer ("Descendre d'une couche") is real operational
+  # documentation, and the trap it guards -- `docker ps --filter name=paperclip`
+  # also matching `paperclip-bef-paperclip-1`, two names for a flag that takes one
+  # -- cost a review round to find. In the same change SKILL.md, the only
+  # always-loaded file, went 10078 -> 7293 bytes (-28%), gotchas.md was trimmed
+  # under its own UNCHANGED 9000 cap, and ~2.4 KB of archaeology moved to
+  # internals.md. The per-file caps stay enforced; only the on-demand corpus
+  # ceiling moved.
+  local skill_max=7300 gotchas_max=9000 docs_max=36000
   local skill_bytes gotchas_bytes docs_bytes=0 f
   skill_bytes=$(wc -c < "$root/SKILL.md" | tr -d ' ')
   gotchas_bytes=$(wc -c < "$root/docs/gotchas.md" | tr -d ' ')
