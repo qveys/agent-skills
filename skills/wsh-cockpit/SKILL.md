@@ -44,17 +44,17 @@ shell, so `;`, `&&`, pipes, `$(...)` work. Slow? `WSH_REXEC_TIMEOUT=180`.
 ## Mode 2 — live
 
 ```bash
-L=scripts/wsh-live.sh   # every subcommand below
-$L spawn [prefix] [--force] [--situate] [--pre <host>] [--tab <name>]  # reuses an alive session
+L=scripts/wsh-live.sh  # all subcommands below
+$L spawn [prefix] [--force] [--situate] [--pre <host>] [--tab <name>]  # reuses an alive session, not one left in ssh
 $L start [session] [--reuse]      # create (auto-unique if unnamed)
 $L open [session] [--tab <name>]  # attach a Wave block
-$L send '<command>' [session]     # type + Enter (framed by default)
-$L keys '<tmux-keys>' [session]   # raw keys: C-c, Up, q, Enter — never framed
-$L read [session] [lines]         # pane snapshot — unframed panes only
+$L send '<command>' [session]     # type + Enter (framed)
+$L keys '<tmux-keys>' [session]   # raw keys: C-c, Up, q, Enter
+$L read [session] [lines]         # pane snapshot (unframed)
 $L output [session] [seq] [--full]  # send #seq's framed segment
 $L wait-done [session] [timeout_sec] [--print]  # wait for the exit footer
-$L step-run <id> '<label>' '<command>' [session] [timeout_sec]  # banner + send + wait, ONE call
-$L banner {header|phase|step|done} ... [session]  # airy step banners (required)
+$L step-run <id> '<label>' '<command>' [session] [timeout_sec]  # banner + send + wait
+$L banner {header|phase|step|done} ... [session]  # airy step banners
 $L stop [session]                 # kill, or release with a keep marker
 $L release <session>              # hand a session back (arg mandatory)
 $L status [prefix] | current | doctor | gc [--dry-run] [--idle=SECONDS] [--only-session=NAME]

@@ -130,25 +130,26 @@ inline complète (un seul `send`) : `docs/internals.md`.
 
 ## `sudo` ne reçoit pas le TTY à travers le framing de `send`
 
-Symptôme (mesuré 2026-09-16 sur vps-openclaw) : `send 'sudo <cmd> 2>&1'` affiche
-`[sudo] password for <user>:` puis échoue **immédiatement** (`sudo: a password is
-required`, footer `exit 1`), sans laisser le temps de taper. La commande cadrée
-tourne dans un contexte dont stdin n'est pas le terminal du pane : `sudo` lit EOF.
-Le `keys` d'appoint n'y change rien — le process est mort avant qu'on puisse
-alimenter son entrée.
+Symptôme (mesuré 2026-09-16 sur vps-openclaw, via le hop distant) : `send 'sudo
+<cmd> 2>&1'` affiche `[sudo] password for <user>:` puis échoue **immédiatement**
+(`sudo: a password is required`, footer `exit 1`) — le process a lu EOF et le `keys`
+d'appoint arrive après sa mort. `docs/framing-and-transfer.md` décrit l'inverse (un
+`sudo` interactif alimentable par `keys`) : les deux ne peuvent pas être vrais
+partout, donc traite le cas mesuré comme le tien dès que le pane n'est pas le TTY
+qui exécute.
 
 Deux voies propres, jamais de saisie du mot de passe par l'agent :
 
 ```bash
-# 1) sans framing : tapée brute au prompt, hérite du TTY (pas de footer exit —
-#    vérifier ensuite par un send cadré)
+# sans framing : tapée brute au prompt, hérite du TTY (pas de footer exit —
+# vérifier ensuite par un send cadré)
 WSH_LIVE_SEP=0 scripts/wsh-live.sh send 'sudo <cmd>' "$SESS"
-# 2) demander à l'utilisateur de la taper lui-même dans le pane
+# ou la faire taper par l'utilisateur dans le pane
 ```
 
 Corollaire : **ne jamais `wait-done` sur un `sudo` cadré** en croyant qu'il attend
-une saisie — il a déjà rendu la main en échec ; vérifier avec `read`. Et si le pane
-est dans un shell root (`su`), il faut **deux** `exit` : un pour root, un pour ssh.
+une saisie — il a déjà rendu la main ; vérifier avec `read`. Pane dans un shell root
+(`su`) : **deux** `exit`, un pour root, un pour ssh.
 
 ## Toujours terminer la commande `send`/`rexec` par `2>&1`
 
@@ -158,8 +159,8 @@ donner l'impression qu'il manque. `2>&1` fusionne les deux flux dans le pane
 **avant** que le footer ne s'imprime, qui reste donc la dernière ligne, fidèle et
 complète. Pourquoi, en détail : `docs/internals.md`.
 ```bash
-$COCKPIT send 'openclaw doctor 2>&1' "$SESS"     # BIEN — stderr fusionné
-$COCKPIT send 'openclaw doctor' "$SESS"          # MAL — stderr s'échappe
+$COCKPIT send 'openclaw doctor 2>&1' "$SESS"   # BIEN
+$COCKPIT send 'openclaw doctor' "$SESS"        # MAL
 ```
 - **Commande chaînée :** `2>&1` sur l'**ensemble** (`'{ cmd1; cmd2; } 2>&1'`), jamais
   sur la seule dernière sous-commande.

@@ -75,7 +75,9 @@ Le footer ne s'imprime **qu'après** le retour de la commande : une commande
 interactive (`sudo` attendant un mot de passe, un pager, un `read`) tourne
 normalement et la bannière de fermeture n'apparaît qu'à la fin — alimente son
 entrée avec `keys` entre-temps. Largeur des règles, palette et mécanique du
-helper versionné : `docs/internals.md`.
+helper versionné : `docs/internals.md`. **Exception mesurée** (hop distant) : un
+`sudo` cadré peut rendre la main en EOF au lieu d'attendre, auquel cas `keys` arrive
+trop tard — `docs/gotchas.md` → « `sudo` ne reçoit pas le TTY ».
 
 **Désactiver :** `WSH_LIVE_SEP=0 scripts/wsh-live.sh send '<cmd>' [session]`
 envoie la commande brute, sans framing — utile pour piloter un TUI/REPL que
