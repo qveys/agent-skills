@@ -79,39 +79,35 @@ after your call returned. `WSH_REXEC_LINGER=0` only to have it gone instantly.
 
 Wave types the command into the remote shell and the first statement loses its
 argument in that handoff. The `true __warmup__;` prefix + `START` marker absorb it —
-don't remove them, and don't make the first real statement error without its argument.
+leave them in; don't make the first real statement depend on its argument.
 
 ## Don't forget cmd:runonce=true on remote
 
 Driving the steps by hand without it runs the command twice (the connection switch
-restarts the controller, which re-runs).
+re-runs the controller).
 
 ## Exit code unreliable via Wave's own footer
 
 Wave's per-block "exit code" is unreliable (`-1` is normal). Trust the
-`---- exit code ----` line, from `echo END$?` on target.
+`---- exit code ----` line (`echo END$?` on target).
 
 ## No input injection into an arbitrary block
 
-wsh has no `sendinput`/`type`. `live` works precisely *because* tmux (on the Mac)
-gives you `send-keys`; `rexec` bakes the whole command in up front, so a command
-prompting for input won't work — make it non-interactive (`-y`, here-strings) or use
-`live`.
+wsh has no `sendinput`/`type`. `live` works *because* tmux (on the Mac) gives you
+`send-keys`; `rexec` bakes the command in up front, so prompting for input won't
+work — make it non-interactive (`-y`, here-strings) or use `live`.
 
 ## Remote needs an existing Wave connection
 
 Check `wsh conn status`; if the host isn't listed, the user opens it once with
 `wsh ssh -n <host>`.
 
-## Reading a remote file
-
-Better done directly: `wsh file cat "wsh://<conn>/path"`. Use this skill when you
-need to *run* something visibly.
-
 ## Never push files via base64 in cockpit send
 
 Use `scripts/wsh-push.sh` (tailscale ssh pipe / `wsh file cp`) from the agent shell,
 then verify with a short `send`. Base64 in tmux breaks quotes and length limits.
+Reading the other way is `wsh file cat "wsh://<conn>/path"` — this skill is for
+*running* something visibly.
 
 ## Wait for the gateway before the next command after a restart
 
@@ -122,11 +118,11 @@ next `send` until the restart's footer shows exit 0 *and* the probe is ok. Prefe
 `sleep`:
 
 ```bash
-$COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' cockpit-theo-plan-225108
+$COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' "$SESS"
 ```
 
-`openclaw gateway restart --wait 45s` couvre le même cas en une commande. Boucle
-inline complète (un seul `send`) : `docs/internals.md`.
+`openclaw gateway restart --wait 45s` couvre le même cas. Boucle inline complète :
+`docs/internals.md`.
 
 ## `sudo` ne reçoit pas le TTY à travers le framing de `send`
 
@@ -147,17 +143,18 @@ WSH_LIVE_SEP=0 scripts/wsh-live.sh send 'sudo <cmd>' "$SESS"
 # ou la faire taper par l'utilisateur dans le pane
 ```
 
-Corollaire : **ne jamais `wait-done` sur un `sudo` cadré** en croyant qu'il attend
-une saisie — il a déjà rendu la main ; vérifier avec `read`. Pane dans un shell root
-(`su`) : **deux** `exit`, un pour root, un pour ssh.
+Corollaire, **dans ce cas mesuré seulement** : ne pas `wait-done` sur un `sudo` cadré
+en croyant qu'il attend une saisie — il a déjà rendu la main ; vérifier avec `read`.
+Sous le contrat de framing (un `sudo` interactif alimenté par `keys`), `wait-done`
+reste au contraire la bonne attente, puisqu'il ne rend pas la main avant la fin. Pane
+dans un shell root (`su`) : **deux** `exit`, un pour root, un pour ssh.
 
 ## Toujours terminer la commande `send`/`rexec` par `2>&1`
 
-Non négociable. L'utilisateur **EXIGE de voir le footer `└─[#N] exit <code>`** de
-chaque process : sans `2>&1`, la sortie stderr peut arriver **après** le footer et
-donner l'impression qu'il manque. `2>&1` fusionne les deux flux dans le pane
-**avant** que le footer ne s'imprime, qui reste donc la dernière ligne, fidèle et
-complète. Pourquoi, en détail : `docs/internals.md`.
+Non négociable. L'utilisateur **EXIGE de voir le footer `└─[#N] exit <code>`** :
+sans `2>&1`, la sortie stderr peut arriver **après** le footer et donner
+l'impression qu'il manque. `2>&1` fusionne les deux flux **avant** l'impression du
+footer, qui reste donc la dernière ligne. Pourquoi, en détail : `docs/internals.md`.
 ```bash
 $COCKPIT send 'openclaw doctor 2>&1' "$SESS"   # BIEN
 $COCKPIT send 'openclaw doctor' "$SESS"        # MAL
