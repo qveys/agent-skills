@@ -75,7 +75,9 @@ Le footer ne s'imprime **qu'après** le retour de la commande : une commande
 interactive (`sudo` attendant un mot de passe, un pager, un `read`) tourne
 normalement et la bannière de fermeture n'apparaît qu'à la fin — alimente son
 entrée avec `keys` entre-temps. Largeur des règles, palette et mécanique du
-helper versionné : `docs/internals.md`.
+helper versionné : `docs/internals.md`. **Exception mesurée** (hop distant) : un
+`sudo` cadré peut rendre la main en EOF au lieu d'attendre, auquel cas `keys` arrive
+trop tard — `docs/gotchas.md` → « `sudo` ne reçoit pas le TTY ».
 
 **Désactiver :** `WSH_LIVE_SEP=0 scripts/wsh-live.sh send '<cmd>' [session]`
 envoie la commande brute, sans framing — utile pour piloter un TUI/REPL que
@@ -149,17 +151,28 @@ scripts/wsh-live.sh remote-init --container <container> "$SESS"
 ```
 
 Copie les fichiers helper sep/step dans `<container>` au **même chemin absolu**
-déjà enregistré pour la session (celui du remote-init hôte, ou le répertoire
-local `~/.cache/wsh-cockpit/helpers/` si le pane n'a jamais quitté le Mac) —
-chemin identique, donc `send`/`banner` ne changent en rien : étape de transfert
-de fichiers uniquement, pas de nouveau mode de framing. Le transport
-(`docker exec <c> mkdir -p` puis `docker cp` par fichier) tourne **hors pane**,
-sur l'hôte où le pane se trouve réellement (`tailscale ssh` si distant, en local
-sinon) — même rationale que `push`/`pull`, ne compte pas pour l'avertissement
-one-shot SSH. Best-effort : `docker`/`tailscale` manquant ou conteneur
-injoignable → avertissement stderr et retour non nul, jamais de hard fail —
-mais volontairement **pas de repli inline** pour ce cas (voir SKILL.md
-« Descendre d'une couche »).
+déjà enregistré pour la session — chemin identique, donc `send`/`banner` ne
+changent en rien : simple transfert de fichiers, pas un nouveau mode de framing.
+Best-effort : conteneur injoignable → avertissement stderr et retour non nul,
+jamais de hard fail, et volontairement **pas de repli inline** (voir SKILL.md
+« Descendre d'une couche »). Transport et rationale : `docs/internals.md`.
+
+**Résoudre le nom du conteneur — jamais `docker ps --filter name=`.** `remote-init
+--container` attend le **nom du conteneur**, ce que `docker exec`/`docker cp`
+exigent. Si le service Compose porte un autre nom, résous-le **par le service** et
+exige **un seul** conteneur en cours d'exécution : `docker ps --filter name=`
+filtre par **sous-chaîne**, donc `name=paperclip` rend aussi
+`paperclip-bef-paperclip-1` — deux noms pour un flag qui n'en accepte qu'un. Lance
+la résolution **depuis le répertoire du projet Compose**, sinon `docker compose ps`
+ne voit pas le service :
+
+```bash
+ids=$(docker compose ps --status running -q <service>)
+count=$(printf '%s\n' "$ids" | grep -c .)
+[ "$count" -eq 1 ] || { echo "attendu 1 conteneur, trouvé $count" >&2; exit 1; }
+name=$(docker inspect --format '{{.Name}}' "$ids" | sed 's#^/##')
+scripts/wsh-live.sh remote-init --container "$name" "$SESS"
+```
 
 **ControlMaster sur le hop lui-même.** Pour un hop OpenSSH (pas `tailscale ssh`,
 qui ne le supporte pas), envoie-le avec le multiplexage activé :
@@ -170,14 +183,13 @@ scripts/wsh-live.sh send "ssh -o ControlMaster=auto -o ControlPath=~/.cache/wsh-
 
 La session interactive du pane EST alors la connexion maîtresse : `push`/`pull`
 retrouvent ce socket par le seul nom de session et le réutilisent — pas de nouveau
-prompt FIDO2 pour les transferts hors pane. Ce n'est pas une entorse à la règle
-« une seule session persistante » : c'est la même session, simplement utilisable
-aussi depuis le shell agent.
+prompt FIDO2. Ce n'est pas une entorse à « une seule session persistante » : c'est
+la même session, utilisable aussi depuis le shell agent. Mécanisme :
+`docs/internals.md`.
 
 Sans `<host>`, `remote-init "$SESS"` reste un interrupteur **inline-only** sticky :
-tout `send`/`banner` ultérieur utilise le wrapper auto-suffisant (pas de sourcing,
-pas d'état côté pane) jusqu'à `local-init "$SESS"` — par exemple quand le pane
-`exit` le hop et revient sur le Mac.
+tout `send`/`banner` ultérieur utilise le wrapper auto-suffisant jusqu'à
+`local-init "$SESS"` — par exemple quand le pane `exit` le hop.
 
 `WSH_LIVE_SEP_REINIT=1` (pour `send`) et `WSH_STEP_INLINE=1` (pour `banner`)
 restent valides comme **surcharge ponctuelle**, gagnant sur `remote-init` comme

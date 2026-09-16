@@ -1,9 +1,8 @@
 # Gotchas
 
-Pièges opérationnels en mode `live` et `rexec` — ce qui change ce qu'un
-agent doit taper. Voir `SKILL.md` pour les règles impératives (celles-là ne
-se discutent pas). Pour le détail archéologique et le "pourquoi" des gardes
-(mesures tmux, régressions, historique), voir `docs/internals.md`.
+Pièges opérationnels en mode `live` et `rexec` — ce qui change ce qu'un agent doit
+taper. Voir `SKILL.md` pour les règles impératives. Pour le détail archéologique et
+le "pourquoi" des gardes (mesures tmux, régressions, historique) : `docs/internals.md`.
 
 ## Un nom de session est littéral, jamais un préfixe
 
@@ -28,161 +27,150 @@ opère sur le serveur tmux par défaut".
 
 ## Une session laissée en plein ssh n'est pas réutilisable par un `spawn` ordinaire
 
-Une fois hoppée, le foreground du pane n'est plus un shell nu, donc `spawn`
-ouvre une nouvelle cockpit (nouvelle auth, second bloc Wave) sauf si la
-session est explicitement listée dans `WSH_COCKPIT_ADOPT`. Workaround :
-réutiliser la session explicitement (`SESSION=…`). Détail :
-`docs/internals.md` → "Adoption d'une session laissée mid-ssh
-(`WSH_COCKPIT_ADOPT`)".
+Une fois hoppée, le foreground du pane n'est plus un shell nu, donc `spawn` ouvre une
+nouvelle cockpit (nouvelle auth, second bloc Wave) sauf si la session est listée dans
+`WSH_COCKPIT_ADOPT`. Workaround : réutiliser la session explicitement (`SESSION=…`).
+Détail : `docs/internals.md`.
 
 ## `docker exec` est une couche de plus que les helpers poussés n'atteignent pas
 
 Symptôme : `No such file or directory` sur le fichier helper juste après le hop
-conteneur, footer `exit` disparu. `remote-init <host>`/`--pre` poussent les
-helpers sur l'HÔTE ; une fois le pane dans `docker exec <c> bash` (ou
-`docker compose exec`), le chemin n'existe pas dans le conteneur. Fix :
-`remote-init --container <container> [session]` — copie les mêmes fichiers au
-même chemin absolu, la forme courte de `send`/`banner` repart sans changement.
-**Pas de repli inline** pour ce cas (workflow réel, rejeté explicite — voir
-`docs/framing-and-transfer.md` → "Descendre d'une couche de plus"). Best-effort :
-`docker`/`tailscale` manquant ou conteneur injoignable → warning stderr, retour
-non nul, jamais de hard fail. Couvert par `selftest-live` cases 14a-14c.
+conteneur, footer `exit` disparu. Fix : `remote-init --container <container>
+[session]` — copie les mêmes fichiers au même chemin absolu, la forme courte de
+`send`/`banner` repart sans changement. **Pas de repli inline** (workflow réel,
+rejeté explicite — voir `docs/framing-and-transfer.md` → "Descendre d'une couche
+de plus"). Best-effort : conteneur injoignable → warning stderr, retour non nul,
+jamais de hard fail. Couvert par `selftest-live` cases 14a-14c. Mécanisme et
+mesures : `docs/internals.md`.
 
 ## `remote-init "$sess"` sans hôte purge maintenant les chemins helpers périmés
 
-Avant, la forme sans hôte basculait juste le flag sticky sans vider un éventuel
-chemin helper remote enregistré par un `remote-init <host>` antérieur sur la
-même session — le mode "inline-only" n'était pas réellement inline : `send`
-continuait de sourcer l'ancien chemin (possiblement injoignable). Corrigé : la
-branche sans hôte appelle le même `remote_helper_paths_clear` que `local-init`
-avant de poser le flag. Couvert par `selftest-live` case 13.
+La branche sans hôte appelle le même `remote_helper_paths_clear` que `local-init`
+avant de poser le flag sticky — plus de chemin helper remote périmé qui traîne.
+Couvert par `selftest-live` case 13. Historique du bug : `docs/internals.md`.
 
 ## Never start cockpit blindly
 
-Another agent may already own that tmux session. Use `spawn` to open/continue
-your cockpit; it reuses an alive session automatically. Only `spawn --force`
-creates a duplicate window.
+Another agent may already own that tmux session. Use `spawn` to open/continue your
+cockpit; it reuses an alive session automatically. Only `spawn --force` creates a
+duplicate window.
 
 ## Never call spawn again mid-workflow to reconnect
 
 If the cockpit tab is still open, run `send`/`read` (or `current` / `status`)
-against the existing `SESSION=`. Calling `spawn` without `--force` **usually**
-reuses it — but this is no longer an unconditional guarantee since the
-registry/adoption lot (fiches 1.2-1.9, `docs/session-lifecycle.md` → "Opening
-a cockpit", steps 1-4): a `spawn` with an explicit **prefix that doesn't
-match** anything in my registry, `WSH_COCKPIT_ADOPT`, or the legacy scan
-**creates a fresh cockpit instead** — a mismatched prefix mid-workflow is a
-second tab the user did not ask for, exactly like `--force`, just spelled
-differently. Calling it with `--force` always opens a second tab regardless
-of prefix.
+against the existing `SESSION=`. `spawn` without `--force` reuses an alive session,
+but a prefix matching nothing in the registry, `WSH_COCKPIT_ADOPT` or the legacy
+scan **creates a fresh cockpit** — a second tab, exactly like `--force`. Pourquoi :
+`docs/internals.md`.
 
 ## Never skip airy step banners on multi-step cockpit work
 
-If you're running more than ~2 related commands, use `banner` before each
-logical step and `banner done` at each phase end. Plain `echo`, markdown
-headings, or chat-only narration do not replace in-pane banners — the user
-is watching the terminal.
+More than ~2 related commands → `banner` before each logical step and `banner done`
+at each phase end. Plain `echo`, markdown headings or chat narration do not replace
+in-pane banners — the user is watching the terminal.
 
 ## The linger does NOT block the call
 
-`rexec` returns as soon as the command finishes; the visible-then-delete
-window runs in a detached background job, so the block can still be
-lingering in the user's Wave tab after your call has returned. Set
-`WSH_REXEC_LINGER=0` only when you want the block gone instantly.
+`rexec` returns as soon as the command finishes; the visible-then-delete window runs
+in a detached background job, so the block can still linger in the user's Wave tab
+after your call returned. `WSH_REXEC_LINGER=0` only to have it gone instantly.
 
 ## First statement mangled (remote)
 
-Wave types the command into the remote shell, and the first statement loses
-its argument in that handoff. The `true __warmup__;` prefix + `START` marker
-absorb it — don't remove them, and don't make the first real statement
-something that errors without its argument.
+Wave types the command into the remote shell and the first statement loses its
+argument in that handoff. The `true __warmup__;` prefix + `START` marker absorb it —
+leave them in; don't make the first real statement depend on its argument.
 
 ## Don't forget cmd:runonce=true on remote
 
-If you ever drive the steps by hand — without it the command runs twice (the
-connection switch restarts the controller, which re-runs).
+Driving the steps by hand without it runs the command twice (the connection switch
+re-runs the controller).
 
 ## Exit code unreliable via Wave's own footer
 
-Wave's own per-block "exit code" is unreliable (`-1` is normal). Trust the
-`---- exit code ----` line, which comes from `echo END$?` on target.
+Wave's per-block "exit code" is unreliable (`-1` is normal). Trust the
+`---- exit code ----` line (`echo END$?` on target).
 
 ## No input injection into an arbitrary block
 
-wsh has no `sendinput`/`type`. `live` mode works precisely *because* tmux (on
-the Mac) gives you `send-keys`; `rexec` bakes the whole command in up front. A
-`rexec` command that prompts for input won't work — make it non-interactive
-(`-y`, here-strings) or use `live`.
+wsh has no `sendinput`/`type`. `live` works *because* tmux (on the Mac) gives you
+`send-keys`; `rexec` bakes the command in up front, so prompting for input won't
+work — make it non-interactive (`-y`, here-strings) or use `live`.
 
 ## Remote needs an existing Wave connection
 
-Check `wsh conn status`; if the host isn't listed, the user opens it once
-with `wsh ssh -n <host>`.
-
-## Reading a remote file
-
-Better done directly: `wsh file cat "wsh://<conn>/path"`. Use this skill when
-you need to *run* something visibly.
+Check `wsh conn status`; if the host isn't listed, the user opens it once with
+`wsh ssh -n <host>`.
 
 ## Never push files via base64 in cockpit send
 
-Use `scripts/wsh-push.sh` (tailscale ssh pipe / `wsh file cp`) from the agent
-shell, then verify with a short `send` in the cockpit. Base64 in tmux breaks
-quotes and length limits.
+Use `scripts/wsh-push.sh` (tailscale ssh pipe / `wsh file cp`) from the agent shell,
+then verify with a short `send`. Base64 in tmux breaks quotes and length limits.
+Reading the other way is `wsh file cat "wsh://<conn>/path"` — this skill is for
+*running* something visibly.
 
 ## Wait for the gateway before the next command after a restart
 
-A bare restart returns while LaunchAgent is still
-starting — immediate `infer`, `agent`, or `channels status` calls race a dead
-socket and fail. **Do not** fire the next `send` until the restart command's
-footer shows exit 0 *and* probe is ok. Prefer **one chained cockpit command**
-(wait loop inside the pane) instead of relying on agent-side `sleep`:
+A bare restart returns while LaunchAgent is still starting — immediate `infer`,
+`agent` or `channels status` calls race a dead socket and fail. **Do not** fire the
+next `send` until the restart's footer shows exit 0 *and* the probe is ok. Prefer
+**one chained cockpit command** (wait loop inside the pane) over an agent-side
+`sleep`:
+
 ```bash
-# Option A — helper on remote (deploy via wsh-push.sh):
-$COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' cockpit-theo-plan-225108
-# Option B — inline wait loop in a single send:
-$COCKPIT send '{ R=1; openclaw gateway restart && { EL=0; while [ $EL -lt 60 ]; do sleep 3; EL=$((EL+3)); if openclaw gateway status 2>&1 | grep -q "Connectivity probe: ok"; then echo READY:$EL; R=0; break; fi; echo waiting:$EL; done; }; openclaw gateway status 2>&1 | head -12; [ "$R" -eq 0 ]; } 2>&1'
+$COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' "$SESS"
 ```
-Only after `Connectivity probe: ok` → send the next step (`infer`, `agent`,
-etc.). OpenClaw also supports `openclaw gateway restart --wait 45s` when run
-as one command.
+
+`openclaw gateway restart --wait 45s` couvre le même cas. Boucle inline complète :
+`docs/internals.md`.
+
+## `sudo` ne reçoit pas le TTY à travers le framing de `send`
+
+Symptôme (mesuré 2026-09-16 sur vps-openclaw, via le hop distant) : `send 'sudo
+<cmd> 2>&1'` affiche `[sudo] password for <user>:` puis échoue **immédiatement**
+(`sudo: a password is required`, footer `exit 1`) — le process a lu EOF et le `keys`
+d'appoint arrive après sa mort. `docs/framing-and-transfer.md` décrit l'inverse (un
+`sudo` interactif alimentable par `keys`) : les deux ne peuvent pas être vrais
+partout, donc traite le cas mesuré comme le tien dès que le pane n'est pas le TTY
+qui exécute.
+
+Deux voies propres, jamais de saisie du mot de passe par l'agent :
+
+```bash
+# sans framing : tapée brute au prompt, hérite du TTY (pas de footer exit —
+# vérifier ensuite par un send cadré)
+WSH_LIVE_SEP=0 scripts/wsh-live.sh send 'sudo <cmd>' "$SESS"
+# ou la faire taper par l'utilisateur dans le pane
+```
+
+Corollaire, **dans ce cas mesuré seulement** : ne pas `wait-done` sur un `sudo` cadré
+en croyant qu'il attend une saisie — il a déjà rendu la main ; vérifier avec `read`.
+Sous le contrat de framing (un `sudo` interactif alimenté par `keys`), `wait-done`
+reste au contraire la bonne attente, puisqu'il ne rend pas la main avant la fin. Pane
+dans un shell root (`su`) : **deux** `exit`, un pour root, un pour ssh.
 
 ## Toujours terminer la commande `send`/`rexec` par `2>&1`
 
-Non négociable. L'utilisateur **EXIGE de voir le footer `└─[#N] exit <code>`
-de chaque process**. Si une commande écrit sur **stderr** (erreur, warning,
-log de progression) et que tu n'as pas redirigé stderr, cette sortie peut
-arriver **après** le footer (ou hors de la fenêtre de `read`), ce qui donne
-l'impression que « les commentaires de fin d'exécution » manquent. En
-collant `2>&1` à la fin de la commande, stdout et stderr fusionnent dans le
-pane **avant** que le footer ne s'imprime — le footer reste donc bien la
-**dernière ligne**, fidèle et complète.
+Non négociable. L'utilisateur **EXIGE de voir le footer `└─[#N] exit <code>`** :
+sans `2>&1`, la sortie stderr peut arriver **après** le footer et donner
+l'impression qu'il manque. `2>&1` fusionne les deux flux **avant** l'impression du
+footer, qui reste donc la dernière ligne. Pourquoi, en détail : `docs/internals.md`.
 ```bash
-# BIEN — stderr fusionné, footer fiable :
-$COCKPIT send 'openclaw doctor 2>&1' "$SESS"
-$COCKPIT send 'tailscale ssh macbook-openclaw "ls -l ~/.openclaw 2>&1"' "$SESS"
-
-# MAL — stderr s'échappe, footer paraît manquant / incohérent :
-$COCKPIT send 'openclaw doctor' "$SESS"
+$COCKPIT send 'openclaw doctor 2>&1' "$SESS"   # BIEN
+$COCKPIT send 'openclaw doctor' "$SESS"        # MAL
 ```
-- **Commande chaînée :** mettre `2>&1` sur l'**ensemble** : `'{ cmd1; cmd2; } 2>&1'`
-  ou regrouper en sous-shell `'( cmd1 && cmd2 ) 2>&1'`. Ne pas se contenter d'un
-  `2>&1` sur la dernière sous-commande.
-- **Jamais de commande interactive sans footer.** `tailscale ssh host` (sans
-  commande) ouvre un **shell interactif** : il ne rend jamais la main, donc le
-  footer `exit` n'apparaît qu'à la déconnexion. Pour un diagnostic, préférer un
-  **one-shot** `tailscale ssh host '<cmd> 2>&1'` qui retourne et imprime le footer.
-- **Ce one-shot est pour un diagnostic ponctuel, pas pour travailler.** Pour du
-  travail réel sur un hôte, ouvre une session SSH persistante (une seule fois)
-  au lieu d'enchaîner des one-shots — voir SKILL.md "Hôte distant — une
-  session, pas une rafale". `send` avertit sur stderr (jamais bloquant) à
-  partir du 2e one-shot SSH consécutif.
+- **Commande chaînée :** `2>&1` sur l'**ensemble** (`'{ cmd1; cmd2; } 2>&1'`), jamais
+  sur la seule dernière sous-commande.
+- **Jamais de commande interactive sans footer** : `tailscale ssh host` sans commande
+  ouvre un shell interactif. Pour un diagnostic, le one-shot
+  `tailscale ssh host '<cmd> 2>&1'`.
+- **Ce one-shot sert au diagnostic, pas au travail** : pour du travail réel, une seule
+  session SSH persistante (SKILL.md "Hôte distant").
 
 ## Never send the next command until the previous one shows exit in the pane
 
 Each framed `send` ends with `└─[#N] exit <code>`. Use `wait-done` before the
-next `send` — do not guess with agent-side `sleep` or grep arbitrary output
-text:
+next `send` — never an agent-side `sleep`, never a grep on arbitrary output:
 ```bash
 $COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' cockpit-theo-plan-225108
 $COCKPIT wait-done cockpit-theo-plan-225108 120    # blocks until #[N] exit seen
@@ -190,9 +178,7 @@ $COCKPIT wait-done cockpit-theo-plan-225108 120    # blocks until #[N] exit seen
 $COCKPIT send 'openclaw infer model run ... 2>&1' cockpit-theo-plan-225108
 $COCKPIT wait-done cockpit-theo-plan-225108 180
 ```
-`wait-done` reads the `@[wsh_seq]` counter set by the last `send` and polls
-the tmux pane for the matching footer. Timeout defaults to 300s
-(`WSH_WAIT_TIMEOUT`). Add `--print` to also emit the result — bounded by the
-`┌─[#N]`/`└─[#N]` markers, no line count to guess — in that same call instead
-of a separate `read`/`output`; see `docs/framing-and-transfer.md` → "Lire un
-résultat sans deviner".
+Timeout par défaut 300 s (`WSH_WAIT_TIMEOUT`). `--print` émet le résultat dans le
+même appel (borné par les marqueurs `┌─[#N]`/`└─[#N]`) au lieu d'un `read`/
+`output` séparé — voir `docs/framing-and-transfer.md` → "Lire un résultat sans
+deviner". Mécanique (`@[wsh_seq]`, polling du pane) : `docs/internals.md`.
