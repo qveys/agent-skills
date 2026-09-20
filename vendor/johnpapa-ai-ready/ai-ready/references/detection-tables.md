@@ -52,14 +52,13 @@ Check for **multiple signals** — no single check is definitive:
 3. **Repo description/topics** — check the GitHub description and topics (from Step 0b) for terms like "beginners", "course", "tutorial", "workshop", "learn", "curriculum", "lessons".
 4. **Lesson structure** — check if numbered folders each contain a `README.md` (lesson content) and optionally `assignment.md`, `solution/`, `code/`, `quiz/`, or `notebook/` subdirectories.
 5. **No primary application** — the repo has no root-level `package.json`, `Cargo.toml`, `go.mod`, or other manifest that would indicate a buildable application (individual lesson folders may have their own manifests for code samples).
-6. **Devcontainer** — check for `.devcontainer/` directory. Common in course repos to provide a ready-to-go development environment. If present, credit it as a form of environment setup (similar to copilot-setup-steps.yml).
+6. **Devcontainer** — check for `.devcontainer/` directory. Common in course repos to provide a ready-to-go development environment.
 
 **A repo is a course if 3+ of these signals are present.** Record it in the findings table as `Repo type: course` with evidence.
 
 ### Course repo adaptations
 
 When a repo is a course, the following steps adapt:
-- **Step 4** (copilot-setup-steps.yml) — skip if a `.devcontainer/` exists (it serves the same purpose for courses). If no devcontainer and no build step, skip entirely.
 - **Step 5** (CI workflow) — skip build/test CI. Suggest markdown validation (link checking, spell check) instead if not already present.
 - **Step 3** (copilot-instructions.md) — include lesson structure conventions: expected folder contents, naming patterns, how to add a new lesson. If lessons have quizzes or assignments, document the expected structure (e.g., each lesson needs `README.md` + `assignment.md` + `solution/`).
 - **Step 2** (AGENTS.md) — "Adding a New Lesson" section instead of "Adding a New Feature". Include the lesson template (what files/folders each lesson should contain).
@@ -116,7 +115,6 @@ For existing AI-ready assets, read their current contents and compare against yo
 |-------|----------------|
 | `AGENTS.md` | Repo structure still accurate? Build/test commands still correct? Tech stack changed? |
 | `copilot-instructions.md` | New conventions from recent PR reviews? Maintenance matrix still covers current file relationships? |
-| `copilot-setup-steps.yml` | Runtime versions match? Install/build commands still correct? New dependencies? |
 | CI workflow | Build/test/lint commands still match the project? New tools added? |
 | Issue templates | Still relevant to the project type? |
 | README Contributing | Links still valid? Commands still correct? |
@@ -135,3 +133,83 @@ If a workspace config was found in Step 1a, read it to find package/project path
 - Detect **conditional modules** — JDK-specific modules (`jdk21`), platform-specific builds, or optional integrations that only build under certain conditions.
 
 *Why?*: A fix in `langchain4j-core` affects 30+ downstream modules. Without mapping cross-package dependencies, agents make changes to one package and miss the ripple effects.
+
+## Risk path detection
+
+Used by Step 2 to seed the `## Never merges without a human` section of `AGENTS.md`.
+
+**A glob match is a candidate, not a conclusion.** Open what matched and confirm it does what the row claims
+before writing it into the boundary. A wrong entry is worse than a missing one: it puts a human back into
+merges that never needed one, and it teaches the reader the section can't be trusted.
+
+<!-- BEGIN GENERATED: risk-paths -->
+<!-- Generated from skills/ai-ready/data/risk-paths.yml — edit that file, then run
+     python3 tools/gen_detection_tables.py -->
+
+Known false positives, every one of them seen in a real repo. When one of these matches, the
+confirm question is not optional:
+
+| Match | Looks like | Usually is | Seen in |
+|---|---|---|---|
+| `**/notification*.*` | Customer contact | An in-app or editor toast, not a message to a customer | johnpapa/vscode-peacock — src/notification.ts is window.showInformationMessage |
+| `**/auth/token*.*` | Auth / permissions | Reading or refreshing a token somebody else issued, not a permission decision | Client libraries and SDK wrappers |
+| `**/seeds/**/*.sql` | Schema / data loss | Seed data that is recreated, not migrated | Most application repos with a local dev database |
+| `**/fixtures/**` | Money | Test fixtures that never touch a payment provider | Any repo with payment tests |
+| `**/*.env.example` | Secrets & config | A placeholder template, committed on purpose | Nearly every repo that has a .env at all |
+
+Order matters less than honesty — a section listing risks the repo does not have is worse than a
+short one.
+
+| Risk | Look for | Why a human | Confirm by opening it |
+|---|---|---|---|
+| Schema / data loss | `**/migrations/**`, `**/*.sql`, `prisma/schema.prisma`, `alembic/**` | Dropped columns and destructive migrations cannot be reverted by reverting the commit | Does this run against a real database, or is it a seed or fixture that gets recreated? |
+| API contract | `**/openapi.*`, `**/swagger.*`, `**/*.proto`, `**/schema.graphql` | Other teams and released clients already depend on the current shape | Is this contract published to anyone outside this repo, or internal-only and versioned together? |
+| Auth / permissions | `**/auth/**`, `**/authz/**`, `**/*permission*`, `**/*role*`, `**/iam/**`, `**/*policy*.json` | Widening access is silent and rarely caught by tests | Does this code DECIDE what someone may do, or only carry a token somebody else issued? |
+| Money | `**/billing/**`, `**/payment*/**`, `**/checkout/**`, `**/invoice*/**` | Mistakes move real money and are visible to customers | Does this path run in production against a real payment provider? |
+| Customer contact | `**/email*/**`, `**/notification*/**`, `**/sms/**`, `**/templates/email/**` | Messages cannot be unsent | Does this send something to a person outside the team, or is it an in-app toast or log line? |
+| Infrastructure | `infra/**`, `**/*.tf`, `**/*.bicep`, `k8s/**`, `helm/**` | Blast radius is the whole environment, not one service | Is this applied to a shared or production environment, or only to a local or ephemeral one? |
+| Secrets & config | `**/*.env`, `**/*.env.*`, `**/secrets/**` | A leaked credential is not revertible in any useful sense | Is this file tracked in git, and does it hold a real value rather than a placeholder? |
+| Release plumbing | `.github/workflows/**`, `**/release*.sh`, `**/publish*.sh` | A change here changes how every other change ships | Does anything actually ship from this repo, or does the workflow only run checks? |
+
+<!-- END GENERATED: risk-paths -->
+
+## Security surface detection
+
+Used by Step 4e. **Generate a security skill only if at least one row matches.** As with risk paths, a glob
+match is a candidate — open it and confirm before writing a rule about it.
+
+| Surface | Look for | The rule worth capturing |
+|---|---|---|
+| Web views / embedded content | `webview`, `iframe`, `Content-Security-Policy`, `dangerouslySetInnerHTML`, `innerHTML` | What may be rendered, and what must be escaped or sandboxed |
+| Trust boundary input | HTTP handlers, message listeners, deserialization, file upload, CLI arg parsing | What is validated where, and what is never trusted |
+| Secrets | `.env` handling, key vaults, credential files, `process.env` reads near network calls | Where secrets come from and where they must never go |
+| Auth / permissions | auth middleware, scope and role checks, extension or OAuth permission manifests | Which paths require which check, and who may widen a scope |
+| Crypto | hashing, signing, token generation, random number use | Which primitives are approved here and which are banned |
+| Query construction | string-built SQL, raw query calls, ORM escape hatches | What must be parameterised |
+
+### The skeleton Step 4e fills
+
+```markdown
+---
+name: security-review
+description: The security rules specific to this repo — trust boundaries, what must never be trusted, and what to check before merging. Use when touching <the real surfaces found>.
+---
+
+# Security review
+
+## Trust boundaries in this repo
+<real paths, and what crosses them>
+
+## Never
+<the repo's real invariants — from SECURITY.md, AGENTS.md, or reviewer comments>
+
+## Before merging a change to <real path>
+<the actual checklist>
+```
+
+Every line must name something real in this repo. If a section would only restate general good practice, drop
+the section — a security skill that reads like a blog post dilutes the rules that actually matter here.
+
+**When nothing matches**, say so explicitly rather than generating a placeholder:
+_"No repo-specific security surface detected — skipping the security skill. Generic security advice would add
+noise without adding knowledge."_
