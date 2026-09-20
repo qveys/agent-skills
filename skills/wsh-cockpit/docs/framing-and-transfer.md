@@ -85,8 +85,7 @@ l'écho supplémentaire dérange. Défaut : `WSH_LIVE_SEP=1`.
 
 ## Lire un résultat sans deviner (`output`, `wait-done --print`)
 
-Les marqueurs `┌─[#N]` / `└─[#N] exit <code>` délimitent chaque `send` de façon
-déterministe — aucun nombre de lignes à deviner :
+Les marqueurs délimitent chaque résultat :
 
 ```bash
 scripts/wsh-live.sh send 'seq 1 500' "$SESS"
@@ -109,33 +108,38 @@ sorti du scrollback capturé → repli suggéré sur `read N` ; pane sans marque
 
 ## Remote shell / lost helpers
 
-Dès que le pane `ssh`/`tailscale ssh`-hop vers un hôte distant, le fichier helper
-local n'existe pas là-bas et son sourcing échoue (« command not found »). Deux
-façons de prendre les devants.
+### Réparer immédiatement un helper absent
 
-**Recommandé, hôte connu d'avance — pousser AVANT le hop** (mécanisme complet :
-`docs/session-lifecycle.md`) :
+`command not found: __wsh` (ou `__wsh_banner`) : confirmer l'erreur et le prompt
+avec `read`. Ne pas attendre le footer impossible : la commande n'a pas démarré.
+Réinstaller/recharger dans la même session, depuis le shell agent :
 
-```bash
-scripts/wsh-live.sh remote-init --pre <host> "$SESS"   # ou : spawn --pre <host>
-scripts/wsh-live.sh send 'tailscale ssh <host>' "$SESS"   # le hop lui-même
-```
+- SSH : `remote-init "$SESS" <host>` (hôte réel).
+- Conteneur : `remote-init --container <container> "$SESS"`.
+- Local : `local-init` puis invalider les marqueurs tmux (un nouveau shell peut avoir
+  perdu ses fonctions). Le prochain appel recrée/recharge les helpers :
 
-**Sinon — après le hop**, une fois la sonde « situer le shell » confirmant un
-écart d'hôte (`spawn --situate` fait ce contrôle et cet appel automatiquement,
-best-effort) :
+  ```bash
+  scripts/wsh-live.sh local-init "$SESS"
+  suffix=$(printf '%s' "$SESS" | tr -cs 'A-Za-z0-9_' '_')
+  tmux set-option -u -t "=$SESS" "@wsh_sep_helpers_$suffix"
+  tmux set-option -u -t "=$SESS" "@wsh_step_helpers_$suffix"
+  ```
 
-```bash
-scripts/wsh-live.sh remote-init "$SESS" <host>   # <host> = ce qu'accepte tailscale ssh/scp
-```
+  Zellij recharge à chaque appel, sans marqueurs à vider.
 
-Avec `<host>`, `remote-init` pousse les helpers sur cet hôte et enregistre les
-chemins, si bien que chaque `send`/`banner` ultérieur garde la forme courte,
-pointée sur la copie distante. Si le push échoue (pas de route, `$HOME`
-injoignable), il avertit sur stderr et se replie sur le framing inline — il ne
-fait **jamais** échouer l'appel. **Un seul hop :** re-hopper vers un TROISIÈME
-hôte n'est pas suivi, le framing y repasse en inline (toujours correct, juste pas
-optimisé).
+Vérifier : `send 'true 2>&1' "$SESS"` et `wait-done "$SESS" 10 --print`
+(footer `exit 0`), puis rejouer via `send`. **Inline seulement après échec constaté
+de la réparation**, en annonçant la cause ; pas de `remote-init` sans hôte en
+première intention. Conserver l'interdiction inline en conteneur ci-dessous.
+Sans erreur explicite de helper, un footer absent ne permet pas de rejouer une
+commande dont l'exécution reste incertaine.
+
+Avant un hop connu : `remote-init --pre <host> "$SESS"`, puis le `send` SSH.
+Sinon, après le hop : `remote-init "$SESS" <host>` (`spawn --situate` le tente
+automatiquement). Avec l'hôte, les helpers sont transférés et leurs chemins
+mémorisés pour conserver les appels courts. Un échec avertit sur stderr et active l'inline : vérifier la réparation.
+Après un autre hop, réinstaller pour l'hôte réellement actif.
 
 **Descendre d'une couche de plus — un conteneur Docker.** Un `docker exec <c>
 bash`/`docker compose exec <c> bash` dans une session déjà hoppée est une couche
@@ -191,9 +195,8 @@ Sans `<host>`, `remote-init "$SESS"` reste un interrupteur **inline-only** stick
 tout `send`/`banner` ultérieur utilise le wrapper auto-suffisant jusqu'à
 `local-init "$SESS"` — par exemple quand le pane `exit` le hop.
 
-`WSH_LIVE_SEP_REINIT=1` (pour `send`) et `WSH_STEP_INLINE=1` (pour `banner`)
-restent valides comme **surcharge ponctuelle**, gagnant sur `remote-init` comme
-sur le défaut :
+Dernier recours ponctuel : `WSH_LIVE_SEP_REINIT=1` (`send`) ou
+`WSH_STEP_INLINE=1` (`banner`) :
 
 ```bash
 WSH_LIVE_SEP_REINIT=1 scripts/wsh-live.sh send '<cmd>' [session]
