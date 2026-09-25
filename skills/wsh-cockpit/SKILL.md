@@ -86,7 +86,7 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 ## Bannières
 
 ```bash
-COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
+COCKPIT="<base directory of this skill>/scripts/wsh-live.sh"
 $COCKPIT banner header "Théo Marceau — OpenClaw" "cockpit-theo-plan-225108"
 $COCKPIT banner phase 1 6 "Fondations & isolation"
 $COCKPIT step-run 1.1 "openclaw doctor" 'openclaw doctor'
