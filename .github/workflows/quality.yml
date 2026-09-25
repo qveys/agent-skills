@@ -2,7 +2,7 @@ name: Quality Checks
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:
@@ -36,3 +36,12 @@ jobs:
 
       - name: Validate Skills Manifest
         run: npm run skills:validate
+
+      # The one wsh-cockpit selftest that belongs in CI: pure file reads (no
+      # tmux server, no cockpit session, no network, well under a second), so
+      # unlike the other selftest-* cases it is side-effect free. It is the
+      # anti-regrowth ratchet on SKILL.md, docs/gotchas.md and the on-demand
+      # corpus total — without it a token-budget regression lands on master
+      # silently (issue #24: it did, from #9 to #23).
+      - name: Docs ratchet (wsh-cockpit)
+        run: bash skills/wsh-cockpit/scripts/wsh-live.sh selftest-docs
