@@ -1372,15 +1372,21 @@ send)
     # Explicit WSH_LIVE_SEP_REINIT always wins (one-off override); otherwise
     # fall back to the session's sticky remote-mode flag (see remote-init).
     REMOTE_SEP_PATH=""
+    LOCAL_SEP_PATH=""
     if [ -n "${WSH_LIVE_SEP_REINIT+x}" ]; then
       USE_INLINE="$WSH_LIVE_SEP_REINIT"
     elif ! remote_mode_get "$SESS" && [ -n "$(remote_helper_path_get "$SESS" sep)" ] \
         && ssh_hop_targets_host "$CMD" "$(remote_host_get "$SESS")"; then
       # Helpers pre-staged (`--pre`) but the pane hasn't hopped yet, and THIS
       # send is the hop itself — load/use the LOCAL helper on the still-local pane.
+      # Source it explicitly: the per-session "loaded" marker survives a pane
+      # shell restart, so trusting it here would emit a bare `__wsh` on a shell
+      # that no longer defines it (`command not found`), losing the hop's footer.
       # Flip remote_mode ON now so every send AFTER this one uses the remote
       # path form already staged on the host.
       USE_INLINE=0
+      LOCAL_SEP_PATH=$(sep_ensure_helpers)
+      sep_mark_helpers_loaded "$SESS"
       remote_mode_set "$SESS" 1 >/dev/null 2>&1 || true
     elif remote_mode_get "$SESS"; then
       REMOTE_SEP_PATH=$(remote_helper_path_get "$SESS" sep)
@@ -1396,6 +1402,10 @@ send)
       # this case (sourcing a small file is cheap; skipping that state saves
       # a second bug surface for no real gain).
       LINE=$(sep_wrap "$SEQ" "$CMD" "$REMOTE_SEP_PATH")
+    elif [ -n "$LOCAL_SEP_PATH" ]; then
+      # Pre-staged hop: the pane is still local, so this send must carry the
+      # helper path explicitly (see the `--pre` branch above).
+      LINE=$(sep_wrap "$SEQ" "$CMD" "$LOCAL_SEP_PATH")
     elif sep_helpers_loaded "$SESS"; then
       LINE=$(sep_wrap "$SEQ" "$CMD")
     else
