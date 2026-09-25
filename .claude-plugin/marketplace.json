@@ -42,6 +42,12 @@
       "source": "./skills/ou-en-suis-je",
       "description": "Context check and status recovery",
       "strict": false
+    },
+    {
+      "name": "quicksilver",
+      "source": "./vendor/UditAkhourii-quicksilver/quicksilver",
+      "description": "Offload bulk judgment calls (filter, classify, rank) to Jev",
+      "strict": false
     }
   ]
 }
