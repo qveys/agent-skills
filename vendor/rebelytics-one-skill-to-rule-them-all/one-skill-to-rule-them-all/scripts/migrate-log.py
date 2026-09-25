@@ -64,6 +64,11 @@ REVIEW_FLAGS = {
     "date-not-iso",
 }
 
+# Fields the target format requires on every file (SKILL.md, File format).
+# Reported, never fabricated: a placeholder would hide the missing judgement
+# the field exists to make visible.
+MANDATORY_TARGET_FIELDS = ("status", "siblings_checked")
+
 ENTRY_RE = re.compile(r"^### Observation (\d+):[ \t]*(.*)$")
 LABEL_RE = re.compile(r"^\*\*([A-Za-z][A-Za-z /-]*):\*\*[ \t]*(.*)$")
 ISO_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
@@ -461,6 +466,19 @@ def main():
     needs_review = [r for r in records if set(r["flags"]) & REVIEW_FLAGS]
     print(f"\nneeds human review: {len(needs_review)}/{len(records)}")
     print(f"parsed losslessly:  {len(records)-len(needs_review)}/{len(records)}")
+
+    # Source fidelity and target conformance are two success criteria. The
+    # lines above answer the first; a field the legacy format never defined
+    # is exactly the one they cannot report on. Enumerate the target's own
+    # mandatory fields, not the mapping table in migration.md.
+    headers = [render(r).split("\n---", 1)[0] for r in records]
+    print("\ntarget conformance (mandatory frontmatter, converted set):")
+    for field in MANDATORY_TARGET_FIELDS:
+        have = sum(1 for h in headers if f"\n{field}:" in h)
+        note = ""
+        if field == "siblings_checked" and have < len(records):
+            note = " — the first review's sibling backfill populates this; nothing else will"
+        print(f"  {field:<18}{have}/{len(records)}{note}")
 
     if not args.convert:
         return
