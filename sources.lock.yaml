@@ -5,75 +5,82 @@ sources:
     ref: main
     path: skills/security-review
     destination: vendor/github-awesome-copilot/security-review
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:09:04.719Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:04:21.860Z
   acquire-codebase-knowledge:
     repo: github/awesome-copilot
     ref: main
     path: skills/acquire-codebase-knowledge
     destination: vendor/github-awesome-copilot/acquire-codebase-knowledge
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:09:44.743Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:04:55.957Z
   agent-owasp-compliance:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-owasp-compliance
     destination: vendor/github-awesome-copilot/agent-owasp-compliance
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:10:19.562Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:05:30.125Z
   architecture-blueprint-generator:
     repo: github/awesome-copilot
     ref: main
     path: skills/architecture-blueprint-generator
     destination: vendor/github-awesome-copilot/architecture-blueprint-generator
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:10:52.247Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:06:05.054Z
   agentic-eval:
     repo: github/awesome-copilot
     ref: main
     path: skills/agentic-eval
     destination: vendor/github-awesome-copilot/agentic-eval
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:11:25.601Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:06:44.627Z
   agent-supply-chain:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-supply-chain
     destination: vendor/github-awesome-copilot/agent-supply-chain
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:11:58.163Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:07:21.246Z
   agent-skill-stack:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-skill-stack
     destination: vendor/github-awesome-copilot/agent-skill-stack
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:12:30.010Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:07:57.830Z
   ai-ready:
     repo: johnpapa/ai-ready
     ref: main
     path: skills/ai-ready
     destination: vendor/johnpapa-ai-ready/ai-ready
-    commit: ab8aed2aaefb186061cd7549daefad0248598636
-    syncedAt: 2026-09-12T03:12:31.015Z
+    commit: 3d0ee5eb4f0944834a60c4666a3e9f2ec107628b
+    syncedAt: 2026-09-25T20:07:58.982Z
   agent-governance:
     repo: github/awesome-copilot
     ref: main
     path: skills/agent-governance
     destination: vendor/github-awesome-copilot/agent-governance
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:13:02.372Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:08:34.444Z
   ai-team-orchestration:
     repo: github/awesome-copilot
     ref: main
     path: skills/ai-team-orchestration
     destination: vendor/github-awesome-copilot/ai-team-orchestration
-    commit: 7568a482ce2df38f8965ab5336a3220db796a4ba
-    syncedAt: 2026-09-12T03:13:35.224Z
+    commit: 6c4d33b9cfca967a28bb2962ef4d55e4a384c88c
+    syncedAt: 2026-09-25T20:09:09.450Z
   one-skill-to-rule-them-all:
     repo: rebelytics/one-skill-to-rule-them-all
     ref: main
     path: .
     destination: vendor/rebelytics-one-skill-to-rule-them-all/one-skill-to-rule-them-all
-    commit: 7518a858cf5b550bf3dc61b1b625f4cb0b5fa87f
-    syncedAt: 2026-09-12T03:13:37.091Z
+    commit: c479475c551ad84d3bfa572245d053ef3ec6e112
+    syncedAt: 2026-09-25T20:09:11.679Z
+  quicksilver:
+    repo: UditAkhourii/quicksilver
+    ref: main
+    path: skills/quicksilver
+    destination: vendor/UditAkhourii-quicksilver/quicksilver
+    commit: 5d6fe5cd4f9d9a9d086a81c797e59b77c0724043
+    syncedAt: 2026-09-25T19:41:00.799Z

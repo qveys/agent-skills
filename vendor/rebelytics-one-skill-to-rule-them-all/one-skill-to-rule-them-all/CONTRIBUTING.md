@@ -84,6 +84,13 @@ If you are not sure which yours is, open an issue and ask.
   and nothing may contain information that identifies a real client or
   project.
 
+## Conduct and security
+
+Everyone taking part is asked to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). A vulnerability is reported
+privately, as described in [SECURITY.md](SECURITY.md), never in a public
+issue.
+
 ## Licence
 
 Contributions are accepted under the repository's licence (CC BY 4.0).

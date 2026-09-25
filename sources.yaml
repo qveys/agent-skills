@@ -76,3 +76,10 @@ sources:
     path: "."
     destination: vendor/rebelytics-one-skill-to-rule-them-all/one-skill-to-rule-them-all
     enabled: true
+
+  - id: quicksilver
+    repo: UditAkhourii/quicksilver
+    ref: main
+    path: skills/quicksilver
+    destination: vendor/UditAkhourii-quicksilver/quicksilver
+    enabled: true
