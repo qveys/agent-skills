@@ -99,12 +99,13 @@ scripts/wsh-live.sh output "$SESS"                 # défaut = le dernier send
 footer inclus. Pas de troncature aveugle : au-delà de `WSH_READ_MAX` lignes (120
 par défaut), il imprime les ~30 premières + une note `« K lignes omises »` + les
 ~60 dernières (la fin porte les erreurs et le footer). `--full` désactive le
-plafond.
+plafond. Session **locale**, segment long :
+`output --full | qs filter "<q>" - --lines` (skill `quicksilver`) ; jamais sur
+un pane distant.
 
-Cas dégradés — jamais de mensonge, toujours un message clair sur stderr : segment
-sorti du scrollback capturé → repli suggéré sur `read N` ; pane sans marqueurs
-(`WSH_LIVE_SEP=0`, `keys`, TUI/REPL) → `output` l'explique et suggère `read N`.
-`read [session] [lines]` reste la voie de l'inspection libre.
+Cas dégradés, signalés sur stderr : segment hors du scrollback capturé ou pane
+sans marqueurs (`WSH_LIVE_SEP=0`, `keys`, TUI/REPL) → `output` suggère `read N`,
+l'inspection libre.
 
 ## Remote shell / lost helpers
 
