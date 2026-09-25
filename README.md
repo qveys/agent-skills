@@ -70,4 +70,39 @@ If you need to change a vendored skill:
 - **Hermes**: Use the path to this repository as the external skills directory.
 - **Housekeeper**: Mount this repository as a read-only Docker volume, or selectively copy specific skills.
 - **Paperclip**: Import skills from this repository path rather than pointing directly to the numerous upstream repositories.
-- **Claude Code / Codex / etc.**: Point the respective configuration or prompt injection to load skills from this unified repository.
+- **Claude Code**: Install skills as plugins from the `qveys-skills` marketplace, or symlink them into `~/.claude/skills/` (see below).
+- **Codex / etc.**: Point the respective configuration or prompt injection to load skills from this unified repository.
+
+### Installing into Claude Code via the marketplace
+
+`.claude-plugin/marketplace.json` exposes each skill of `skills/` and `vendor/` as a plugin of the `qveys-skills` marketplace. Plugins are installed from GitHub, so changes must be pushed to `master` first:
+
+```bash
+claude plugin marketplace add qveys/agent-skills
+claude plugin install wsh-cockpit@qveys-skills        # one skill
+claude plugin marketplace update qveys-skills         # refresh the marketplace listing
+claude plugin update wsh-cockpit@qveys-skills         # update the installed plugin
+```
+
+`marketplace update` only refreshes the listing; `plugin update` is what brings a changed skill into an already-installed plugin.
+
+When adding a skill to `skills/` or a source to `sources.yaml`, add a matching entry to `marketplace.json`. Vendored duplicates of a `skills/` copy (`agent-governance`, `ai-ready`) and `security-review` (shadows the built-in command) are intentionally not listed.
+
+### Installing into Claude Code via symlinks
+
+Claude Code loads every directory in `~/.claude/skills/` that contains a `SKILL.md`. Symlinking to this checkout means edits and `skills:sync` updates are picked up without reinstalling:
+
+```bash
+mkdir -p ~/.claude/skills
+
+# Proprietary skills (skips _template)
+for d in ~/Git/agent-skills/skills/*/; do n=$(basename "$d"); [[ $n == _* || -e ~/.claude/skills/$n ]] || ln -s "${d%/}" ~/.claude/skills/$n; done
+
+# Vendored skills (skips security-review, which would shadow the built-in /security-review)
+for f in ~/Git/agent-skills/vendor/*/*/SKILL.md; do d=$(dirname "$f"); n=$(basename "$d"); [[ $n == security-review || -e ~/.claude/skills/$n ]] || ln -s "$d" ~/.claude/skills/$n; done
+```
+
+Both loops are idempotent: rerun them after adding a skill or syncing a new source. Existing entries are never overwritten, so on a name collision the `skills/` copy wins (e.g. `agent-governance`, `ai-ready`).
+
+- `security-review` is skipped on purpose: same-named user skills take precedence over bundled Claude Code skills, so the symlink would shadow the built-in `/security-review` command. Remove an existing link with `rm ~/.claude/skills/security-review` to get the built-in back.
+- Don't also install the same skill as a plugin from the `qveys-skills` marketplace (`.claude-plugin/marketplace.json`), or it will show up twice.
