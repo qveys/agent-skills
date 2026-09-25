@@ -12,8 +12,8 @@ description: >-
 
 # wsh-cockpit
 
-Do terminal work on the user's behalf **in the open**, in a Wave Terminal block
-they can see, read, and step into. Read the relevant doc first:
+Run commands **in the open**, in a Wave Terminal block the user can read and
+control. Relevant docs:
 
 - `docs/session-lifecycle.md` — spawn/start/open/stop/release, situating, adoption, `gc`.
 - `docs/banners.md` — banner rendering rules, palette, `step-run`.
@@ -28,7 +28,7 @@ they can see, read, and step into. Read the relevant doc first:
 - **`live`** — persistent tmux session **on the Mac** you drive, the user attaches;
   best for co-driving. Needs `brew install tmux`. → `scripts/wsh-live.sh`
 
-Default to `rexec`; `live` when the work is interactive.
+Default: `rexec`; interactive: `live`.
 
 ## Mode 1 — rexec
 
@@ -70,11 +70,12 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 ## Règles impératives
 
 - **`spawn`, jamais `start cockpit`** (nom réutilisé par d'autres agents) ; `--force` seulement pour une 2e fenêtre délibérée.
-- **Cockpit nommé par l'utilisateur** (ou listé dans `WSH_COCKPIT_ADOPT`) : adopte-le, n'en crée pas une seconde.
+- **Cockpit nommé par l'utilisateur** (`WSH_COCKPIT_ADOPT` inclus) : adopte-le, n'en crée pas une seconde.
 - **`--situate` obligatoire juste après `spawn`** ; `--pre <host>` est un plus (pré-push des helpers avant le hop), pas un substitut — une session réutilisée peut être restée en ssh.
 - **Bannières obligatoires** pour tout plan multi-étapes, jamais `echo` ni markdown nu.
 - **Une seule session SSH persistante** par hôte, pas une rafale de one-shots.
 - **Toujours terminer les commandes par `2>&1`** — non négociable.
+- **Helper absent : réinstaller immédiatement ; inline en dernier recours.** Voir `docs/framing-and-transfer.md`.
 - **Jamais de `send` avant le footer `exit` du précédent** : `wait-done`, jamais un `sleep` ni du grep sur la sortie.
 - **Jamais de base64, `cat` ou heredoc dans `send`** pour transférer un fichier — `push`/`pull`.
 - **Lire un résultat avec `output`** (ou `wait-done --print`), pas `read N` ; `read` sert au scrollback libre (TUI, REPL, pane non framé).

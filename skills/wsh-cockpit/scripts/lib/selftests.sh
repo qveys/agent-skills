@@ -275,33 +275,37 @@ cmd_selftest_live() {
   # state pre_push_helpers leaves (remote_host_set/remote_helper_path_set,
   # remote_mode left OFF) with no real network involved; a local shell
   # function stands in for `ssh` so the "hop" never touches the network, and
-  # the "remote" path is the real local default helper file so post-hop
+  # the "remote" path is a separate local copy of the helper so post-hop
   # sourcing genuinely succeeds once remote_mode flips ON. Same tmux-only
   # limitation as checks 9-10 (remote_mode_set is a no-op under zellij).
   if [ "$MUX" != tmux ]; then
     echo "skip 12 pre-staged hop framing (backend $MUX — no per-session option store)"
   else
-    local default_sep_helper rc_a rc_b out_a out_b flat_a flat_b
+    local default_sep_helper staged_sep_helper hop_seq rc_a rc_b out_a out_b flat_a flat_b
     default_sep_helper=$(sep_ensure_helpers)
     remote_host_set "$SESS" "fake-e2e-host"
-    remote_helper_path_set "$SESS" sep "$default_sep_helper"
+    staged_sep_helper="${default_sep_helper}.staged-$$"
+    cp "$default_sep_helper" "$staged_sep_helper"
+    remote_helper_path_set "$SESS" sep "$staged_sep_helper"
 
     set +e
     "$0" send "ssh() { printf 'FAKE_SSH_HOP_TO:%s\n' \"\$1\"; }" "$SESS" >/dev/null 2>&1
     "$0" wait-done "$SESS" 30 >/dev/null 2>&1
+    # Reproduce the hazard the hop framing must survive: a pane shell that
+    # restarted (its `__wsh` is gone) while the per-session "loaded" marker
+    # survived in the tmux option store. The hop send must therefore carry the
+    # local helper path explicitly — trusting the marker emits a bare `__wsh`
+    # on a shell that no longer defines it.
+    sep_mark_helpers_loaded "$SESS"
     "$0" send 'ssh fake-e2e-host' "$SESS" >/dev/null 2>&1
     "$0" wait-done "$SESS" 30 >/dev/null 2>&1
     rc_a=$?
+    # `read` captures a pane window, not only the hop command: an earlier
+    # framed send can supply the local-helper prefix on its own line. Bind the
+    # assertion to THIS hop's sequence so a retained older line cannot pass it.
+    hop_seq=$(cat "$SEQF" 2>/dev/null || true)
     set -e
-    # `read`, not `output`: the raw typed prefix (the sourcing form or the
-    # inline block) is echoed as pane input BEFORE the __wsh-rendered banner
-    # even starts — `output` only isolates the rendered banner segment, which
-    # never shows that prefix either way. The inline form never calls __wsh
-    # at all (sep_wrap_inline wraps the raw command directly in `{ cmd; }`),
-    # so its presence/absence of `{ ssh fake-e2e-host; }` is what distinguishes
-    # it from the sourcing form's `. '<path>' && __wsh 'N' 'ssh fake-e2e-host'`
-    # — command text is unique enough in this session that scrollback from
-    # earlier cases can't produce a false match.
+    # `read` includes the typed helper call; `output` only shows its rendering.
     out_a=$("$0" read "$SESS" 80 2>&1 | tr -d '\r')
     flat_a=$(printf '%s' "$out_a" | tr -d '\n')
 
@@ -314,18 +318,20 @@ cmd_selftest_live() {
     flat_b=$(printf '%s' "$out_b" | tr -d '\n')
 
     if [ "$rc_a" -eq 0 ] \
-       && printf '%s' "$flat_a" | grep -Fq '{ ssh fake-e2e-host; }' \
+       && ! printf '%s' "$flat_a" | grep -Fq '{ ssh fake-e2e-host; }' \
        && printf '%s' "$out_a" | grep -Fq 'FAKE_SSH_HOP_TO:fake-e2e-host' \
-       && ! printf '%s' "$flat_a" | grep -Eq "__wsh '[0-9]+' 'ssh fake-e2e-host'" \
+       && printf '%s' "$flat_a" | grep -Fq ". '${default_sep_helper}' && __wsh '${hop_seq}' 'ssh fake-e2e-host'" \
+       && ! printf '%s' "$flat_a" | grep -Fq "$staged_sep_helper" \
        && [ "$rc_b" -eq 0 ] \
-       && printf '%s' "$flat_b" | grep -Fq ". '${default_sep_helper}' && __wsh '" \
+       && printf '%s' "$flat_b" | grep -Fq ". '${staged_sep_helper}' && __wsh" \
        && printf '%s' "$flat_b" | grep -Fq "'echo POST_HOP_MARK'" \
        && printf '%s' "$out_b" | grep -Fq 'POST_HOP_MARK'; then
       report_live_case "12 pre-staged hop framing" 0
     else
-      report_live_case "12 pre-staged hop framing" 1 "rc_a=$rc_a rc_b=$rc_b — hop send must be inline (no sourcing of staged path) and flip remote_mode; post-hop send must use the staged path"
+      report_live_case "12 pre-staged hop framing" 1 "rc_a=$rc_a rc_b=$rc_b — hop must use the local helper and flip remote_mode; post-hop send must use the staged path"
     fi
 
+    rm -f "$staged_sep_helper"
     remote_helper_path_clear "$SESS" sep
     remote_host_clear "$SESS"
     remote_mode_set "$SESS" 0 >/dev/null 2>&1 || true
