@@ -44,6 +44,84 @@
       "strict": false
     },
     {
+      "name": "agent-governance",
+      "source": "./skills/agent-governance",
+      "description": "Governance, safety and trust controls for AI agent systems",
+      "strict": false
+    },
+    {
+      "name": "ai-ready",
+      "source": "./skills/ai-ready",
+      "description": "Analyze a repository and generate AI-ready configuration (AGENTS.md, instructions, CI)",
+      "strict": false
+    },
+    {
+      "name": "ao-reviewer",
+      "source": "./skills/ao-reviewer",
+      "description": "Execute Auto-Orchestrator (AO) reviewer tasks",
+      "strict": false
+    },
+    {
+      "name": "learn",
+      "source": "./skills/learn",
+      "description": "Tune skills from past sessions and find unused skills, plugins or MCP servers",
+      "strict": false
+    },
+    {
+      "name": "omniroute-ops",
+      "source": "./skills/omniroute-ops",
+      "description": "Operate OmniRoute from what is actually installed, preferring the admin UI",
+      "strict": false
+    },
+    {
+      "name": "acquire-codebase-knowledge",
+      "source": "./vendor/github-awesome-copilot/acquire-codebase-knowledge",
+      "description": "Map, document and onboard into an existing codebase",
+      "strict": false
+    },
+    {
+      "name": "agent-owasp-compliance",
+      "source": "./vendor/github-awesome-copilot/agent-owasp-compliance",
+      "description": "Check an AI agent codebase against the OWASP Agentic Security Top 10",
+      "strict": false
+    },
+    {
+      "name": "agent-skill-stack",
+      "source": "./vendor/github-awesome-copilot/agent-skill-stack",
+      "description": "Assemble the smallest compatible set of agent skills for a goal",
+      "strict": false
+    },
+    {
+      "name": "agent-supply-chain",
+      "source": "./vendor/github-awesome-copilot/agent-supply-chain",
+      "description": "Verify supply chain integrity for agent plugins, tools and dependencies",
+      "strict": false
+    },
+    {
+      "name": "agentic-eval",
+      "source": "./vendor/github-awesome-copilot/agentic-eval",
+      "description": "Evaluate and improve AI agent outputs",
+      "strict": false
+    },
+    {
+      "name": "ai-team-orchestration",
+      "source": "./vendor/github-awesome-copilot/ai-team-orchestration",
+      "description": "Bootstrap and run a lightweight multi-agent development team",
+      "strict": false
+    },
+    {
+      "name": "architecture-blueprint-generator",
+      "source": "./vendor/github-awesome-copilot/architecture-blueprint-generator",
+      "description": "Generate architecture blueprints from a codebase",
+      "strict": false
+    },
+    {
+      "name": "one-skill-to-rule-them-all",
+      "source": "./vendor/rebelytics-one-skill-to-rule-them-all/one-skill-to-rule-them-all",
+      "description": "Capture skill improvement opportunities during task execution",
+      "strict": false
+    },
+    {
       "name": "quicksilver",
       "source": "./vendor/UditAkhourii-quicksilver/quicksilver",
       "description": "Offload bulk judgment calls (filter, classify, rank) to Jev",

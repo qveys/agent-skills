@@ -70,8 +70,20 @@ If you need to change a vendored skill:
 - **Hermes**: Use the path to this repository as the external skills directory.
 - **Housekeeper**: Mount this repository as a read-only Docker volume, or selectively copy specific skills.
 - **Paperclip**: Import skills from this repository path rather than pointing directly to the numerous upstream repositories.
-- **Claude Code**: Symlink each skill into `~/.claude/skills/` (see below).
+- **Claude Code**: Install skills as plugins from the `qveys-skills` marketplace, or symlink them into `~/.claude/skills/` (see below).
 - **Codex / etc.**: Point the respective configuration or prompt injection to load skills from this unified repository.
+
+### Installing into Claude Code via the marketplace
+
+`.claude-plugin/marketplace.json` exposes each skill of `skills/` and `vendor/` as a plugin of the `qveys-skills` marketplace. Plugins are installed from GitHub, so changes must be pushed to `master` first:
+
+```bash
+claude plugin marketplace add qveys/agent-skills
+claude plugin install wsh-cockpit@qveys-skills        # one skill
+claude plugin marketplace update qveys-skills         # pull new versions
+```
+
+When adding a skill to `skills/` or a source to `sources.yaml`, add a matching entry to `marketplace.json`. Vendored duplicates of a `skills/` copy (`agent-governance`, `ai-ready`) and `security-review` (shadows the built-in command) are intentionally not listed.
 
 ### Installing into Claude Code via symlinks
 
