@@ -45,7 +45,7 @@ hôte enregistré, ils échouent avec un message clair plutôt que de deviner.
 ### Hors session SSH — `wsh-push.sh` ou `wsh file` directement
 
 ```bash
-PUSH="<base directory of this skill>/scripts/wsh-push.sh"   # dossier affiché au chargement du skill
+PUSH="<base directory of this skill>/scripts/wsh-push.sh"
 $PUSH /tmp/theo-tools.md /Users/qveys/agents/theo-marceau/TOOLS.md
 $PUSH ./patch.json5 /Users/qveys/theo-patch.json5 qveys@macbook-openclaw
 

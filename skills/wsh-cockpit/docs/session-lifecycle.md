@@ -62,7 +62,7 @@ courte (~100 caractères), jamais le blob inline. Exception à la règle
 `exit` — ne pas appeler `wait-done` sur le hop, mais sur la sonde distante :
 
 ```bash
-COCKPIT="<base directory of this skill>/scripts/wsh-live.sh"   # dossier affiché au chargement du skill
+COCKPIT="<base directory of this skill>/scripts/wsh-live.sh"
 $COCKPIT spawn theo-plan --situate --pre macbook-openclaw
 # → SESSION=cockpit-... puis "pre-push: helpers staged on '...' — remote mode ON"
 $COCKPIT send 'tailscale ssh macbook-openclaw 2>&1' "$SESS"   # hop interactif : pas de footer exit, exempté de wait-done
