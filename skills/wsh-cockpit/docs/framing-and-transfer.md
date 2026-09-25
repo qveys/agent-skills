@@ -128,12 +128,12 @@ Réinstaller/recharger dans la même session, depuis le shell agent :
 
   Zellij recharge à chaque appel, sans marqueurs à vider.
 
-Vérifier : `send 'true 2>&1' "$SESS"` et `wait-done "$SESS" 10 --print`
-(footer `exit 0`), puis rejouer via `send`. **Inline seulement après échec constaté
-de la réparation**, en annonçant la cause ; pas de `remote-init` sans hôte en
-première intention. Conserver l'interdiction inline en conteneur ci-dessous.
-Sans erreur explicite de helper, un footer absent ne permet pas de rejouer une
-commande dont l'exécution reste incertaine.
+Vérifier d'abord un `helpers pushed` de `remote-init` ; sur `inline framing
+only`, `send 'true 2>&1'`/`wait-done 10 --print` ne valident que l'inline. Sinon,
+rejouer via `send`. **Inline seulement après échec constaté de la réparation**,
+en annonçant la cause ; pas de `remote-init` sans hôte en première intention.
+Interdiction inline en conteneur ci-dessous. Footer absent sans erreur explicite
+de helper : ne pas rejouer une commande incertaine.
 
 Avant un hop connu : `remote-init --pre <host> "$SESS"`, puis le `send` SSH.
 Sinon, après le hop : `remote-init "$SESS" <host>` (`spawn --situate` le tente
