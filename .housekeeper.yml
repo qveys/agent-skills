@@ -1,0 +1,39 @@
+# Housekeeper GitHub App — per-repository handler configuration.
+#
+# Read by the app from the repository root as `.housekeeper.yml` only
+# (housekeeper: src/github/repo-config-loader.ts). An absent or unparseable
+# file means `handlers: {}` — every handler is silently disabled.
+#
+# `baseBranch` defaults to `main` upstream. This repository uses `master`, so it
+# is declared on every handler that reads it.
+
+handlers:
+  # No .trufflehog-config.yml here: TruffleHog runs with its defaults.
+  secret-scan:
+    enabled: true
+    baseBranch: master
+
+  require-up-to-date:
+    enabled: true
+    baseBranch: master
+
+  normalize-title:
+    enabled: true
+
+  # No .github/labeler.yml here: only the `Type:` label is set, Area is skipped.
+  triage:
+    enabled: true
+
+  # Off: this repository has no .github/labels.yml, the handler would fail.
+  sync-labels:
+    enabled: false
+
+  # Off: its emoji + Conventional Commits header rule does not match the
+  # commit style of this repository.
+  commit-message-check:
+    enabled: false
+
+  # Agentic handler: pushes commits onto pull requests. Left off until the
+  # deterministic handlers above have been observed here.
+  pr-comments-resolver:
+    enabled: false
