@@ -25,7 +25,7 @@ Add an entry to `sources.yaml`:
     destination: vendor/author-repo/my-awesome-skill
 ```
 
-Then run `npm run skills:sync -- --id my-awesome-skill` (or `npm run skills:sync` to sync all).
+Then run `npm run skills:sync -- --id my-awesome-skill` (or `npm run skills:sync -- --all` to sync all enabled sources).
 
 ## How to check for updates
 
@@ -38,10 +38,13 @@ This will compare the installed SHAs in `sources.lock.yaml` against the latest c
 ## How to synchronize
 
 ```bash
-npm run skills:sync
+npm run skills:sync -- --all          # all enabled sources
+npm run skills:sync -- --id <id>      # a single source
 ```
 
 This command will fetch any missing or updated skills and update `sources.lock.yaml`. It does not execute any code downloaded during the sync process.
+
+The `--` is required: without it, npm consumes `--all`/`--id` as its own options and the CLI never receives them.
 
 ## `sources.yaml`
 
