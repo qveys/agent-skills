@@ -2,24 +2,55 @@
 
 Display format for the AI-Readiness Report (Step 11), HTML report, badge, and PR creation.
 
-## AI-Readiness Report format
+## Scoring
 
-Calculate the score by counting how many assets have **Nailed It** status. Determine the maturity level from the count. Build the progress bar using 🟩 for nailed, 🟨 for could-be-better, and ⬜ for missing — always 12 squares.
+Count how many of the 11 assets (SKILL.md § The 11 tracked assets) have **Nailed It** status. That count sets
+the medal — then **apply the prerequisites**, which can only lower it.
+
+| Medal | Name | Count | Also required | What it means |
+|-------|------|-------|---------------|---------------|
+| 🥉 | **Getting Started** | 1–3 | — | A few of the files exist. Nothing in the repo tells an agent how it works |
+| 🥈 | **On Track** | 4–6 | — | Real scaffolding is in place, but the conventions are still in people's heads |
+| 🥇 | **Solid** | 7–9 | `AGENTS.md` nailed | The conventions are written down, in the one file every tool reads |
+| 🏆 | **AI-Ready** | 10–11 | every 🤖 AI Context asset nailed | Conventions, boundaries, reviewers and procedures all live in the repo |
+
+**The prerequisites are not decoration.** A repo can reach seven nailed assets on a changelog, docs, issue
+templates, a PR template, CI, and two reviewer agents — with no `AGENTS.md` at all. That repo is well maintained. It is not AI-ready, and a plain count would hand it 🥇. So the count is a
+ceiling, not a score: without `AGENTS.md` nailed the repo stops at 🥈 however high the count goes, and if any
+🤖 AI Context asset is short it stops at 🥇.
+
+**What the score does not measure.** It measures what is *in place*. It does not measure whether agents write
+better pull requests in this repo, because nothing here has measured that.
+
+Build the progress bar using 🟩 for nailed, 🟨 for could-be-better, and ⬜ for missing — always 11 squares.
+
+**When a prerequisite caps the medal, say so on the score line** and name what would lift it — a capped medal
+with no explanation reads like a bug. For example:
+
+```
+📊 **Your Repo Today** · 🥈 **On Track** · 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟨 · 9 of 11 nailed
+↳ held below 🥇 — `AGENTS.md` has no `## Never merges without a human` section
+```
+
+**Never quote a time saving.** No "45-minute review becomes 5 minutes", no percentage, no multiplier. Nothing
+in this skill measures review time, and a maintainer who does track it will spot the invented number and stop
+trusting the rest of the report.
+
+## AI-Readiness Report format
 
 Display this report:
 
 ```
 🎯 **AI-Readiness Report**
 
-Your repo is about to get a whole lot easier to contribute to — and
-a whole lot faster to review. AI agents will know your conventions,
-follow your patterns, and deliver PRs that are ready to merge.
+Here's what an AI agent can learn about this repo from the repo
+itself today — and what it still has to guess.
 
 **{repo-name}**
 
 ---
 
-📊 **Your Repo Today** · {medal} **{level-name}** · {progress-bar} · {nailed} of 12 nailed
+📊 **Your Repo Today** · {medal} **{level-name}** · {progress-bar} · {nailed} of 11 nailed
 {languages} · {frameworks} · {test-runner} ({test-count}) · `{build-command}`
 
 🤖 **Existing AI Config (detected)**
@@ -81,11 +112,11 @@ _For monorepos: list each `.github/instructions/{area}.instructions.md` file cre
 
 ---
 
-🏆 **If You Accept** · {after-progress-bar} · {after-nailed} of 12 nailed → {after-medal} **{after-level}**
+🏆 **If You Accept** · {after-progress-bar} · {after-nailed} of 11 nailed → {after-medal} **{after-level}**
 
-🤖 AI Context        {5 status indicators}
-🔧 Dev Workflow      {4 status indicators}
-📖 Onboarding        {3 status indicators}
+🤖 AI Context        {6 status indicators}
+🔧 Dev Workflow      {3 status indicators}
+📖 Onboarding        {2 status indicators}
 
 ---
 
@@ -118,7 +149,7 @@ generate an HTML report I can share
 - The tech profile table should only include rows that apply (e.g., skip "Frameworks" if none detected)
 - Keep each detail to one short line — no multi-line descriptions
 - The "What I Did" section should list every file that was created, suggested, or skipped
-- **Show an updated progress bar** after the "What I Did" section — recount nailed assets (counting all created files as now "Nailed It"), determine the new medal, and show the category breakdown. This shows the user the improvement visually (e.g., going from 🥈 On Track · 🟩🟩🟩🟩🟩🟨⬜⬜⬜⬜⬜⬜ · 5 of 12 → 🏆 AI-Ready · 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 · 12 of 12)
+- **Show an updated progress bar** after the "What I Did" section — recount nailed assets (counting all created files as now "Nailed It"), determine the new medal, and show the category breakdown. This shows the user the improvement visually (e.g., going from 🥈 On Track · 🟩🟩🟩🟩🟩🟨⬜⬜⬜⬜⬜ · 5 of 11 → 🏆 AI-Ready · 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 · 11 of 11)
 - The "What To Do Next" section should include only the bullet points that are relevant — e.g., if no files were created, skip "review generated files" and instead say something like "Your repo is already AI-ready — nice work!"
 - **Issue/PR provenance is mandatory** — every issue comment, PR comment, or PR body update generated by this skill must include `Assisted by [ai-ready](https://github.com/johnpapa/ai-ready)`.
 - **Documentation sync is mandatory** — when changing generated guidance, templates, or PR behavior, update related documentation to match the repository's documented standards and maintenance matrix.
@@ -176,8 +207,8 @@ Include a summary of what was added and the before/after score in the PR body, a
 
 **{repo-name}**
 
-**Before:** {before-medal} **{before-level}** · {before-nailed} of 12 nailed
-**After this PR:** {after-medal} **{after-level}** · {after-nailed} of 12 nailed
+**Before:** {before-medal} **{before-level}** · {before-nailed} of 11 nailed
+**After this PR:** {after-medal} **{after-level}** · {after-nailed} of 11 nailed
 
 🤖 AI Context        {status indicators}
 🔧 Dev Workflow      {status indicators}

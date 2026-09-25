@@ -2,13 +2,27 @@
 
 Load this before creating any skill or making substantial changes to one.
 
-**Contents:** Taxonomy in full · The Pre-Flight Principle · Lean Content
-(including progressive disclosure, the default structure above ~500 lines)
-· Documenting an external tool surface · Licensing · Versioning releases ·
-Author Attribution Template · Confidentiality layers · Timelessness ·
-Editing skills — always start from the live file · Verifying relocations
-and restructures · Trial design · New skills · Retiring skills · Principle
-Propagation.
+## Contents
+
+- Taxonomy in full
+- The Pre-Flight Principle
+- Lean Content (including progressive disclosure — the default, and
+  mandatory for publication — and reference-file shape by trigger count)
+- Configuration vs process — the three-container rule
+- Documenting an external tool surface
+- Licensing
+- Versioning releases
+- Author Attribution Template
+- Confidentiality layers
+- Timelessness — shared skills must not capture current state
+- Editing skills — always start from the live file
+- Declaring a block's scope mechanically
+- Verifying relocations and restructures
+- Trial design — measuring whether a behaviour fires unprompted
+- New skills
+- Runtime prerequisites — declare what the skill needs to be able to run
+- Retiring skills — harvest before you retire
+- Principle Propagation
 
 ## Taxonomy in full
 
@@ -79,6 +93,46 @@ and only `--untracked-files=all` expands it. Before shipping a verification
 step that reports a number, confirm what the number's unit is, and
 enumerate and read the set whenever enumeration is cheap.
 
+**A list of sources is an embedded command too.** The rule above is easy to
+read as being about shell snippets, because those are what "command" looks
+like. It is not: it governs anything the skill instructs a future session to
+*use* without checking — and a URL, an API endpoint, a database name, a file
+path or a tool invocation is exactly that. A skill whose core is "consult
+these sources" ships its sources the way another ships a command.
+
+Observed on one such skill: eight sources, all plausible, all written down
+without being tried. **Four were unusable** — two returned 403 even with a
+browser user agent, one returned "Making sure you're not a bot!", and one
+returned an empty single-page-app shell with no results. Every one of them
+read as correct on the page, and would have gone on reading as correct on
+every later re-read.
+
+Why this is worse than a broken shell command: a broken command fails
+loudly, and the session knows to stop. An unreachable source returns
+*something* — an empty result set, a login page, a shell — and the natural
+reading of an empty result is "nothing matched", which is a finding. The
+skill then teaches a future session to report absence where there was only
+a blocked door. Execute every source once, against real data, before the
+skill file is saved; record which ones were tried and what they returned.
+
+**A verification that cannot come out negative is not a verification.**
+Before shipping any check, ask what it would look like if the thing being
+checked had failed — and if the answer is "the same", the check is
+decoration. The trap has a characteristic shape: the artefact being
+inspected was produced or touched by the same session doing the inspection.
+Observed: a set of bundles was published to a remote destination and
+verified by reading a local extraction folder that the same session had
+written the corrected content into. It would have reported "all correct"
+had the publication failed completely.
+
+What distinguishes arrival from non-arrival is a **discriminator** — a
+value only the far side can produce: a server-assigned identifier, an
+upstream timestamp, a digest computed remotely, a field the local copy has
+no way to fabricate. Hash-matching a published artefact against your own
+source is not one, because both sides are yours. Name the discriminator
+when writing the check, and if you cannot name one, say the step is
+unverified rather than writing a check that always passes.
+
 ## Lean Content
 
 A skill should contain only content that changes the agent's behaviour at
@@ -89,6 +143,23 @@ rules with context. Test: would removing it change behaviour? Keep
 per-session rules in the skill body and episodic material in reference
 files loaded on demand (progressive disclosure) — a skill loaded every
 session is fixed overhead and should be audited like one.
+
+**Declare your own core ceiling, and let it only fall.** A skill opts into
+the size ratchet by naming its own bound — `core_max_lines: N` in SKILL.md
+frontmatter, or a `.core-ceiling` file beside it. `validate-skill-bundle.py`
+then fails when the core exceeds it, with the instruction to move content to
+a reference file rather than raise the number. Seed it at whatever the core
+measures today: the point is not that every skill reaches some ideal size,
+it is that no skill silently grows past where it already is.
+
+A skill that declares neither has not opted in. The count and the distance to
+the 500-line target are still reported; nothing is gated. That is deliberate,
+and it is the correction to a real defect: the ceiling was briefly a constant
+inside the validator, so one skill's budget failed three unrelated skills that
+had not changed. **A tool one skill ships for the whole library must not carry
+that skill's own constants.** Any threshold in a shared script is either read
+from the subject being checked or is advisory — the tell is a gate that fails
+on input its author never looked at.
 
 **Progressive disclosure is the DEFAULT, not an option.** Loading happens
 in three levels: frontmatter metadata is always in context, the SKILL.md
@@ -126,6 +197,54 @@ whole file and every edit risks the rest. Retrofitting existing large
 skills is a separate, lower-priority job — the default binds immediately
 for new work and for any revision substantial enough that the body is
 being rewritten anyway.
+
+**For any skill intended for publication, progressive disclosure is
+mandatory, not the default for large ones.** A readiness check verifies
+what it was written to catch, and structure was agreed by everyone and
+encoded by no one — so a ~1,200-line single file passed every
+confidentiality, licence and attribution check and shipped, with its
+restructure noted as a "standing follow-up" for three runs. Define "flat"
+mechanically so the gate is a script line, not a judgement: **no
+`references/` directory, or a `references/` directory the `SKILL.md` never
+points at (no pointer list or section map naming a file in it), or a
+`SKILL.md` above the line budget the review sets with nothing loaded on
+demand.** The budget is the review's call; the
+existing cores sit in the 400–750 range and are the reference points. A
+flat skill is a skill that will need a restructure before it can ship, and
+the restructure is done at the live skill through the ordinary
+review-and-install path — never in the repo, where the installed copy and
+the published tree would diverge at once.
+
+**A reference file is shaped by its TRIGGERS, not its line count.** The
+core's size ceiling does not transfer to reference files, because their
+cost is conditional: the core is loaded in full every session, so a line
+there taxes every consumer; a reference file loads only when its episode
+fires, so a long file that loads rarely is cheap. The rule: a reference
+file serves one episode, or a set of episodes that reliably co-occur.
+Splitting is indicated when the count of distinct load triggers into one
+file grows, whatever its size — each trigger pays for every other
+episode's content — and a long single-episode file is correctly shaped
+and must not be split to satisfy a size rule. Measured once on this
+skill's own bundle (lines / distinct load triggers named in the core):
+
+| file | lines | triggers |
+|---|---:|---:|
+| `weekly-review.md` | ~1,100 | 1 |
+| `skill-authoring.md` | ~950 | ~1 |
+| `observation-log.md` | ~930 | **14** |
+| `environments.md` | ~720 | 2 |
+| `signals.md` | ~170 | 3 |
+
+A line ceiling would have flagged the largest file first — the one that
+needs no change, since a review loads it whole as a unit — and said
+nothing about the mid-sized file that fourteen separate moments in a
+session each pull in. So `scripts/validate-skill-bundle.py` prints the
+per-file trigger count on every run, deliberately **not gated**: one
+snapshot cannot site a threshold, and this one already overturned the
+rule that was about to be written; the next review argues from a trend.
+When a split is made, it needs a load-observation test per moved episode
+(below), and never two structural splits in one test period — a
+regression could not be attributed to either.
 
 **The load trigger is a new failure point the monolith did not have.** A
 split delivers its saving only if the reference file is actually fetched
@@ -301,6 +420,55 @@ is modified or may have drifted, verify the problem still exists at
 upstream HEAD before reporting it; (4) match the repository's house style
 for reports.
 
+**Pre-send gate — run on the finished draft, after the pre-flight.** The
+pre-flight decides whether and where a report goes; nothing reads the
+finished text for what must not be in it, and **a check that only confirms
+required parts is passed by adding, never by leaving out**. Before sending,
+search the finished draft for every identifier the workspace keys carry —
+the project or client name in each participating workspace root, hostnames,
+account identifiers — expecting 0 hits, with a positive control on a text
+known to contain one. A generic path segment the skill itself names
+(`skill-observations`, `observation-log`) is not an identifier and stays
+off the list.
+
+The failure this prevents: a verification report posted to an upstream
+maintainer carried two private project names, because the multi-log block
+asks that every id leaving its log carry its workspace key, and in a local
+install the key IS the project's directory name. The report complied with
+the rule and leaked because of it. A human noticed about ten minutes after
+posting; the fix was delete and re-post, because an edit leaves the first
+version in the edit history.
+
+**A draft a person will paste is checked the way it will be consumed.**
+The pre-flight runs before a draft exists and the gate above reads the
+draft for what must not be in it; neither reads it as a paste source,
+and two properties break in transit that no content check sees.
+Observed: three issue drafts in one file, each headed `**Title:**
+<title>` and hard-wrapped with blank lines between paragraphs, posted by
+hand — every published title began with `** ` because the label's
+closing asterisks were selected with the value, and every body lost all
+of its blank lines, so its paragraphs rendered merged; the pre-flight
+had passed, the identifier scan was clean, and a post-publication
+comparison that normalised whitespace called the bodies identical. So,
+for any report handed over to be posted by hand: (1) **shape** — each
+field alone in its own fenced block, the fence longer than any backtick
+run inside it, the target field named on the line above the block
+("paste into Title") and never as a label on the value's line; one
+paragraph per line with the blank lines between them kept, because issue
+bodies render a single newline as a line break; draft metadata meant for
+another field (a label, a labels suggestion) never sits inside the body
+block; (2) **paste-check** — before hand-over, extract each block
+exactly as a paste would and compare it with the intended field value;
+(3) **read-back** — after posting, fetch the published title and body
+and compare them with the draft line by line, blank lines included,
+never through a whitespace-normalising comparison: a comparison that
+normalises away the property under test certifies nothing, and the
+person's copy path can drop structure that no check on the file can
+see. The same holds for every artefact handed over for pasting — an
+activation block, a hook entry, a handoff document; the config case
+carries its own read-back in `environments.md` ("A delegated setup step
+is not done until you have observed it").
+
 ## Confidentiality layers
 
 The open-source/internal boundary is a confidentiality boundary; enforce it
@@ -312,10 +480,11 @@ in layers so any one catches what others miss:
    skill, scan all source material for client names, URLs, domains,
    internal terminology, identifiably-specific structures; replace with
    generic equivalents first.
-3. **Post-draft sweep** — a separate re-read focused only on leakage:
-   proper nouns besides the author, domains/URLs/project identifiers,
-   vertical details that narrow the client, examples traceable to a real
-   project.
+3. **Post-draft sweep** — a separate re-read focused only on leakage.
+   Read the examples, usage strings, default arguments and fixtures
+   **first** (layer 8 says why), then proper nouns besides the author,
+   domains/URLs/project identifiers, vertical details that narrow the
+   client, examples traceable to a real project.
 4. **Structural principle** — when in doubt, remove. Slightly more generic
    beats slightly leaky.
 5. **Cross-product re-identifiability sweep** — the final pass before any
@@ -374,6 +543,29 @@ in layers so any one catches what others miss:
    writes into: internal registries can name internal things; public
    artefacts reference them by capability, not by name.
 
+8. **Examples are synthetic by construction, not scrubbed afterwards** —
+   examples, usage strings, default arguments, test fixtures and sample
+   payloads are the highest-risk text in a skill and the least reviewed.
+   Their whole purpose is to have been real: an example is pasted from a
+   working run precisely so that it works, so live data survives a scrub
+   there more reliably than anywhere else. Write them synthetic at
+   authoring time — a generic label and a round number in the shape the
+   argument or payload actually takes, which still teaches the format.
+   This layer is prospective, and it has to be, because no term-based
+   scan can back it up: a confidentiality scan matches names, domains and
+   handles, and a **number** is not one of those. Nor can such a scan
+   usefully be keyed on a vertical or category noun — a generic category
+   word fires on nearly every file, so adding it to the tripwire list
+   trades one failure mode for a worse one. A clean scan is therefore
+   evidence about the listed terms only, and says nothing about whether
+   an example carries a real allocation, count, date or sample payload.
+   This is the house rule that every instrument gets the same guard, in
+   its confidentiality form: an empty result from an instrument that
+   cannot see the object is not evidence of absence. So the sweep in
+   layer 3 reads examples first, not last, and the pre-publication read
+   includes a human pass over every example, usage string and fixture in
+   the tree — the one check no script can do for the author.
+
 ## Timelessness — shared skills must not capture current state
 
 Any skill leaving the author's own maintenance loop (published, or shared
@@ -401,10 +593,55 @@ staleness markers. Replace them with verification-based phrasing — "at
 last verification", "a later re-check found" — plus an explicit
 instruction for how to re-verify against the live source; readers need to
 know how to re-check a claim, not when the author last did. The same rule
-covers commit messages on published repos. And make the check mechanical:
-this rule was violated during fluent drafting while fully documented, so
-any publishing workflow must grep public artefacts for month-name + year
-patterns before committing — a scan, not a reminder.
+covers commit messages on published repos.
+
+**The prohibition, stated by what it forbids: no dated first-party
+verification claim in any public artefact, in ANY date format.** The
+shapes are examples subordinate to that definition, never the definition:
+`YYYY-MM-DD`, `DD/MM/YYYY`, `Mon YYYY`, `Month YYYY`, `QN YYYY`, the
+bare-year "as of 2026", and the sentence-position forms "on <date>" and
+"run on <date>". The list matters because the rule was once specified as
+"month-name + year patterns", and every scan thereafter grepped exactly
+that shape: a reviewer running the example has complied with the
+rule as written, so nothing prompts the question whether the pattern
+covers the rule, and twelve ISO-dated claims survived — one inside a
+reviewed, signed-off release commit. So make the check mechanical and
+auditable: any publishing workflow scans public artefacts before
+committing — a scan, not a reminder — with the pattern set in a script
+where it can be extended in one place, and **the scan records WHICH
+patterns ran**; a green result whose coverage is unstated is unauditable.
+Two consequences follow. A count produced by an enumerated set of shapes
+is a **lower bound**, never a "corrected" figure: the sweep that reported
+eight sites as corrected had missed three the least specific grep found.
+And a check that has passed every run is evidence about the check, not
+about the artefact — the instrument guard (`observation-log.md`, "Every
+instrument gets the same guard") applies to green results exactly as to
+empty ones. **One question is open and is the maintainer's, not the
+scanning session's:** whether a claim-status form ("verified on <date>")
+is exempt, on the argument that it is what stops a claim going stale
+silently and that "at last check" makes a same-week verification
+indistinguishable from a months-old one. Until it is decided, the rule
+stands as written; if an exemption is granted, it is encoded as a scan
+exclusion in the script, never as prose the next scan re-interprets.
+
+**The internal-document exemption assumes a maintenance loop that is only
+prose.** The taxonomy sanctions internal skills that describe one
+installation, and those may legitimately name current state. The unstated
+assumption is that someone re-checks that state — but nothing fires when it
+drifts, so "internal, therefore dated facts are fine" becomes "internal,
+therefore permanently wrong".
+
+Observed: an internal skill opened with a hardcoded version number of the
+system it described; the deployed system moved on and the skill's first
+paragraph was wrong within a day. It was the second time the same number
+had gone stale, and five further copies sat in memory files and handover
+notes. The first paragraph is where it does most damage, because it is read
+before anything that might contradict it.
+
+So an internal skill may carry current state only with a **named
+re-check**: what re-derives the value, and when. "Version X (re-derive from
+`<command>` at each review)" is acceptable; a bare number is not. Where no
+re-check exists, do not record the value — record how to obtain it.
 
 ## Editing skills — always start from the live file
 
@@ -420,7 +657,21 @@ patterns before committing — a scan, not a reminder.
    safe, and the way to make it hold where no guard exists is to begin
    every edit with the copy (`mkdir -p` the staging dir, `cp` the live
    file in, `diff -q` to prove it matches), so the live path is never the
-   one in hand. Scope and precedence: staging-only governs every context
+   one in hand. **Resolve the live path before copying** (`readlink -f`,
+   or `cd` into it and `pwd -P`) and prove the staged file is a distinct
+   file, not only an equal one. Where the skills entry is a symlink into
+   a checkout — a common dotfiles layout — `cp -R` of the entry copies the
+   link, the staged path becomes a second name for the live directory,
+   every "staged" edit lands in the live skill, and `diff -rq` passes
+   because it compares content through whatever both paths resolve to:
+   it verifies the copy is faithful, never that it is a copy. A proving
+   step that reports success exactly when staging has silently become
+   editing in place is worse than none. So after the copy: the staged
+   path is not itself a link (`[ ! -L "$s" ]`), and its `SKILL.md` has a
+   different inode from live's (`stat -c %i` on GNU, `stat -f %i` on
+   macOS) — refuse to edit when they match. The manifest's install
+   instructions name the resolved real path, since that is the file the
+   user must overwrite. Scope and precedence: staging-only governs every context
    and every size of change. The direct-apply clause in SKILL.md ("Acting
    on Observations") decides *when* a small change is made — now, rather
    than at the next review — never *where*; it does not license an
@@ -437,7 +688,9 @@ patterns before committing — a scan, not a reminder.
    and establish freshness PER COPY from evidence — mtime, content
    probes, hashes — never from role ("the repo", "the live version");
    then pick the base explicitly. During multi-pass work in interactive
-   sessions, re-verify the baseline before interpreting any diff: a diff
+   sessions, snapshot the staged copy before each pass (weekly-review.md,
+   Delivery — an unversioned staging tree keeps no other baseline) and
+   re-verify the baseline before interpreting any diff: a diff
    that SHRINKS against a supposedly-fixed baseline means the baseline
    absorbed earlier changes (e.g. the user installed a staged update
    mid-session), not that edits vanished. Treat unexpected diff-stat
@@ -456,7 +709,10 @@ patterns before committing — a scan, not a reminder.
    the same day takes a discriminated anchor — weekly-review.md, Delivery) — the FULL
    skill directory (SKILL.md plus references/, scripts/, assets/ where
    present), never SKILL.md alone — and present it for review and
-   installation; nothing goes live until the user installs it. Where no
+   installation; nothing goes live until the user installs it, and once
+   the user starts reviewing the copy it is frozen — defects found are
+   reported, not applied, until the review ends (weekly-review.md, Step 5
+   standing rules, "a review opens a freeze on the artefact"). Where no
    presentation/upload tool exists (e.g. Claude Code CLI), present the
    staged path and a change summary in chat instead; staging-only applies
    in every environment — it's the review loop's safety property, not a
@@ -485,7 +741,17 @@ patterns before committing — a scan, not a reminder.
    set, not just the one that failed — the pressure toward trigger-rich
    descriptions puts others near the boundary too, and only measuring the
    set reveals it; (4) `name` is kebab-case and matches the containing
-   directory; the frontmatter parses as YAML with both required keys;
+   directory; the frontmatter parses as YAML with both required keys. A
+   `description:` (or `name:`) value that contains `: ` anywhere, or that
+   starts or ends with a YAML-special character (`#`, `*`, `&`, `!`, `|`,
+   `>`, `{`, `[`, `'`, `"`), must be double-quoted or reworded to avoid
+   the colon — an unquoted `: ` inside the value turns the rest of the
+   line into a nested key and the whole block stops parsing. The
+   validator reporting "`name` missing" on a frontmatter that visibly has
+   a `name:` line is the signature of an unparseable block, not of a
+   missing field: fix the quoting, not the name. The quoting rule for the
+   observation-log frontmatter does not travel here by analogy; it is
+   stated here because this is where skill frontmatter is authored;
    (5) the packed archive's member paths contain no backslash — read as
    RAW central-directory bytes, because CPython's `zipfile` normalises
    `0x5C` to `/` on read and reports a malformed archive as clean; Windows
@@ -561,6 +827,78 @@ patterns before committing — a scan, not a reminder.
    a live violation of it, in a skill whose rules were under active
    rewrite, found only because the prompt happened to be opened for an
    unrelated reason).
+9. **Inserting into an ordered structure is a splice, not a replacement.**
+   String replacement edits text, but a list, a table, a `## Contents`
+   index, a frontmatter block or a numbered sequence of steps is
+   structure, and an anchor-relative insert is safe only if you know what
+   is adjacent to the anchor — which `replace` gives no way to assert.
+   Observed: a list entry prepended to the paragraph that followed the
+   list, "entry + blank line + anchor", pushed the list's own closing
+   blank into its middle; rendered, one list became two, and the defect
+   survived a validator run, a confidentiality scan and a commit review,
+   because an *unchanged* line had moved relative to its neighbours and
+   none of the three reads shape. So: parse to lines, locate the insertion
+   point by a **structural predicate** (the last line matching `^- `, the
+   last row before the blank, the key after which the new key sorts),
+   splice, rejoin. Never anchor on the text of a neighbouring paragraph.
+   Where a replacement is used anyway, assert the neighbour's shape first
+   — that the line before the anchor is the last list item, that the blank
+   you are about to add is not already there — and fail loudly if it
+   differs. The repo-mode gate in `scripts/validate-skill-bundle.py`
+   catches the list case after the fact; the predicate prevents it.
+
+**Verifying an edit is a separate problem, and the loader works against
+you.** The rules above cover editing safely; nothing covers confirming
+afterwards that the edit took. Three things get conflated — the file on
+disk, the copy the loader injected into this session, and what a fresh
+session would receive — and they can all differ at once.
+
+Observed, in one session: the loader served a *previous lineage* of a
+`SKILL.md`, missing an entire section and stating the opposite rule on a
+formatting standard, while the file on disk (hash-verified, edited 45
+minutes earlier in that same session) carried the corrected text. Answering
+from the injected copy would have given the user exactly the wrong answer
+on a normative question. It was caught only because someone grepped the
+file on disk for a literal quote.
+
+The obvious remedy fails too: launching a subagent to simulate "a fresh
+session" does not break the freeze. A subagent's context starts cold but
+its skills come from the **same snapshot**, so it reports the same stale
+content with the added authority of an independent-looking check.
+
+So: **verify an edit by reading the file on disk**, never by asking the
+loaded skill what it says and never by asking a subagent. And when the
+question is what a *future* session will receive, only a genuinely new
+session answers it — the installing session structurally cannot.
+
+## Declaring a block's scope mechanically
+
+A section of an instructions file, a skill, or a shared config often applies
+to only some of the work done on a machine. The usual approach is to trust
+the agent to notice the irrelevance from context. That fails quietly, and it
+fails in the direction that does damage: advice written for one domain is
+applied confidently to another.
+
+Instead, open the block with a **detectable condition** — something the
+agent can check rather than infer:
+
+> Applies ONLY when the project has a `package.json` with a `react`
+> dependency. In every other project, ignore this section entirely.
+
+Observed working in both directions inside a single session on a machine
+serving two unrelated lines of work: the section stayed inert while the
+working directory was a documents folder, and governed the whole workflow
+once a React project was open.
+
+**State the negative branch explicitly**, because it is the half that gets
+left out. "Applies when X" reads as complete and leaves the agent to decide
+what happens otherwise; "and in every other case ignore this entirely" is
+the sentence that makes the block safe to carry. A condition with no stated
+negative is a preference, not a scope.
+
+Prefer conditions the agent can test cheaply and locally — a file's
+presence, a path segment, a declared dependency — over ones needing
+judgement ("when working on frontend tasks").
 
 ## Verifying relocations and restructures
 
@@ -645,6 +983,29 @@ enforcement machinery because it reads as redundancy — and sweep any "pure
 restructuring" change for net-new behaviour, which hides well in a large
 rewording diff.
 
+**Build a relocation as a re-runnable derivation, not a one-off patch.** A
+relocation verified against the base as it stood at build time is correct
+only for that base. If a concurrent edit lands on the live file before
+delivery — inside the very block being moved — laying the finished target
+files over the new tip **silently reverts it, with no conflict reported**,
+because nothing in the delivery compares against the tip it is landing on.
+Git will not save you here: the relocation is a set of whole files, not a
+patch, so there is nothing to conflict.
+
+Observed: a split of one file into a core plus new reference files, built
+and verified three ways (line-range diff against the old base, exact-match
+against the new files, word-count check), all of which passed — against the
+base from an hour earlier. One line inside a moved block had changed in the
+meantime.
+
+So express the relocation as something **re-derivable from whatever the
+live base currently is** — a script, or a procedure precise enough to
+re-run — and re-derive immediately before delivery rather than trusting the
+earlier verification. Where a manual patch is genuinely the only option,
+diff the moved regions against the live tip at delivery time and stop on
+any difference. The verification that matters is the one against the state
+you are landing on, not the state you started from.
+
 ## Trial design — measuring whether a behaviour fires unprompted
 
 When a change is on trial and what's being measured is whether the agent
@@ -664,6 +1025,26 @@ or the trial cannot distinguish "not yet observed" from "not happening".
 
 ## New skills
 
+**Building next to siblings: separate the inherited steps from the
+necessary ones.** A new member of a family inherits its siblings' shape,
+and consistency with the family is a legitimate design value — which is
+precisely why the inherited-but-unnecessary step survives review. It does
+not read as wrong; it reads as belonging.
+
+Observed: a family whose every member opens by identifying a governing
+institution, because every member's output depends on which rulebook
+applies. The new member copied that step and required the institution to be
+resolved before any work. The user's correction was one line: *don't ask
+about the institution — just ask how many items I want of each kind.* They
+already knew the numbers. An inherited question had turned a one-line input
+into a two-step interrogation.
+
+The person who detects this is the one who has to answer the question, and
+by then it has shipped. So make it an explicit authoring step: for each
+step copied from a sibling, state **what this skill's output would lose if
+the step were removed**. A step whose answer is "consistency" is inherited,
+not necessary — drop it, or demote it to an optional branch.
+
 **Before authoring a skill for a library, tool or project, check whether
 the project already ships one.** The reflex on "make a skill for X" is to
 read X's documentation and write a `SKILL.md` from scratch; many projects
@@ -674,7 +1055,12 @@ their updates. One search of the upstream repository (those paths, plus
 "skill" in the README and release notes) settles it. If an official skill
 exists, install it and put only the local delta into a companion, exactly
 as for any other upstream-maintained skill (weekly-review.md, Step 2);
-if it does not, author, and consider offering the result upstream.
+if it does not, author, and consider offering the result upstream. And
+before authoring any skill from scratch, look for an uninstalled draft
+under `[workspace folder]/skill-updates/*/<skill-name>/` (`find`, as in
+weekly-review.md Step 5): a staged copy that never went live has no live
+file to diff against, so nothing else in the procedure surfaces it, and
+a from-scratch draft beside it drops whatever it carried.
 
 Use the skill-creator when available, passing the observation(s) as the
 brief. Determine type early: open-source → strip and generalise; internal →
@@ -734,6 +1120,57 @@ reconciliation notes, not the diffs, are the deliverable the maintainer
 reviews. Two independent movers flagging the same ambiguity means the
 brief is the defect: fix the brief and re-issue rather than adjudicating
 the outputs.
+
+## Runtime prerequisites — declare what the skill needs to be able to run
+
+A skill that drives something outside itself — a CLI binary, a daemon, an
+API key, a container runtime — is only as installed as the thing it drives.
+Presence in the skill listing says the files are there. It says nothing
+about whether invoking them can work.
+
+The failure this produces is specific and expensive: the agent reads a
+full, confident description, selects the skill for the task it names, and
+discovers the missing prerequisite only partway through the work. It reads
+as the agent's error rather than the inventory's, and the task it was
+chosen for is already half-done. In one reported estate, nine skills for a
+single security tool sat in the listing indistinguishable from working
+ones; the tool needed Docker, which was absent, and a paid API key outside
+the user's subscription. The adopter's only defence was a hand-written
+prohibition in `CLAUDE.md` naming all nine — a rule that has to be read and
+obeyed, rather than a fact the system knows.
+
+The same estate showed why this has to be a required element rather than
+good practice: an audit found 2 of the 9 members declared the prerequisite
+in their own `SKILL.md` and 7 did not. Left optional, a family drifts.
+
+**Required for any skill that drives an external tool.** Declare the
+prerequisites as *checkable facts*, so that something other than a human
+reader can evaluate them:
+
+```yaml
+requires:
+  - binary: docker          # on PATH
+  - env: OPENAI_API_KEY     # set and non-empty
+  - service: http://localhost:11434   # reachable
+```
+
+Three forms cover nearly everything: a binary on `PATH`, an environment
+variable that is set, and an endpoint that answers. Each is one cheap
+command. Anything that cannot be reduced to one of those is a prose note in
+the skill body, not a declaration — a check nobody can run is worse than an
+honest sentence, because it looks like a guarantee.
+
+**What consumes it.** Session Start step 6 resolves `skill:` targets and
+reports the ones that do not resolve; with this block it can also report the
+ones that resolve *and cannot run*. A dead target and a deleted target both
+mean "observations are accumulating against something that will never act on
+them", and for any skill driving an external tool the dead one is the
+commoner case.
+
+**The general principle.** Presence in a registry is not capability. Any
+inventory an agent selects from needs a liveness dimension, because the
+failure it otherwise produces — confidently choosing a listed thing that
+cannot run — is invisible at selection time and expensive at use time.
 
 ## Retiring skills — harvest before you retire
 

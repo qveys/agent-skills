@@ -70,9 +70,15 @@ Run from the workspace folder. Python 3.8+, no dependencies.
    you do not intend to convert:
 
    ```bash
-   python3 scripts/migrate-log.py --check \
-     skill-observations/log.md skill-observations/archive/*.md
+   python3 scripts/migrate-log.py --check skill-observations/log.md
+   find skill-observations/archive -maxdepth 1 -name '*.md' -exec \
+     python3 scripts/migrate-log.py --check {} +
    ```
+
+   Two invocations rather than one glob: the archive directory may not
+   exist, and an unmatched `*.md` is a hard error under zsh — which would
+   take the live log's check down with it, for want of files that were
+   only ever optional.
 
    The archives are free test coverage: they contain format drift that
    current entries no longer show, and they exercise parser paths the live
@@ -105,24 +111,52 @@ Run from the workspace folder. Python 3.8+, no dependencies.
      --overrides overrides.json
    ```
 
-6. **Verify.** The report's file count must equal the number of
-   `### Observation` headers in `log.md`:
+6. **Verify twice: source fidelity, then target conformance.** The
+   report's file count must equal the number of `### Observation` headers
+   in `log.md`:
 
    ```bash
    grep -c '^### Observation' skill-observations/log.md
-   ls skill-observations/observation-log/*.md | wc -l
+   find skill-observations/observation-log -maxdepth 1 -name '*.md' | wc -l
    ```
 
    Spot-check three files against their originals, including one that was
-   resolved and one that carried a qualifier.
+   resolved and one that carried a qualifier. Then read the report's
+   `target conformance` block, and confirm it from the files: a converted
+   set is faithful to a source that never had `siblings_checked`, so every
+   file lacks it, and nothing but the next review's sibling backfill will
+   add it. Enumerate the fields from the target's own definition (SKILL.md,
+   File format), never from the mapping table above — a field absent from
+   the table is indistinguishable from one absent from the schema:
+
+   ```bash
+   o="skill-observations/observation-log"
+   n=$(find "$o" -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
+   for field in status siblings_checked; do
+     have=$(find "$o" -maxdepth 1 -name '*.md' -exec grep -l "^$field:" {} + | wc -l | tr -d ' ')
+     echo "$field: $have/$n"
+   done
+   ```
+
+   A count below `n` for `siblings_checked` is expected and is the state
+   the first review clears; a count below `n` for `status` is a converter
+   defect — report it.
 7. **Move legacy archives under the new layout** so one directory holds
    the whole history, and retire the old file so nothing scans it:
 
    ```bash
-   mv skill-observations/archive/*.md skill-observations/observation-log/archive/
-   rmdir skill-observations/archive
+   find skill-observations/archive -maxdepth 1 -name '*.md' \
+     -exec mv {} skill-observations/observation-log/archive/ \;
+   rmdir skill-observations/archive 2>/dev/null
    mv skill-observations/log.md skill-observations/log.md.migrated
    ```
+
+   `find` again, for the same reason as step 6, plus one of its own: a
+   bare `mv …/*.md` that matches nothing passes the literal pattern to
+   `mv` under bash, which then fails with a confusing "No such file" —
+   and under zsh it aborts before `mv` runs at all. The `rmdir` is
+   allowed to fail: a directory that still holds something is a signal to
+   look, not a reason to stop the migration.
 
    Legacy archives stay in their monolithic format. They were written
    under conventions that changed several times; converting them would

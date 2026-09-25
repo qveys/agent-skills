@@ -10,6 +10,11 @@ The live file is `[workspace folder]/skill-observations/cross-cutting-principles
 and its authority comes from the adopter's own evidence trail — so nothing
 here takes effect until the adopter consciously imports it.
 
+## Reconciliation
+
+SKILL.md step 1 points here for the whole procedure; it carries only the
+trigger and the one-line summary.
+
 **When to read this file:** only when the Session Start Protocol
 (SKILL.md, step 1) finds the starter-set reconciliation due — the marker
 `skill-observations/starter-principles-reviewed.txt` is absent, or holds
@@ -22,6 +27,16 @@ carries a rule under their own wording is covered, and only the uncovered
 entries are offered. Bump the version line whenever entries are added or
 materially changed, or existing installs never see the change.
 
+**The offer is one line, made once:** "the bundle ships N starter
+principles; M are not covered by your file — want to see them?" On yes,
+show only the uncovered ones and let the adopter pick. On a fresh install
+M equals N and the choice is simply "start empty, or seed". Either way,
+write the shipped version into the marker file afterwards, so the offer
+never repeats until the set changes. **Never pre-populate silently:** the
+live file's authority comes from the adopter's own evidence trail, and
+unexamined imported rules contradict the pruning principle the file itself
+carries (entry 11).
+
 **How to import:** copy the entries the adopter chooses (all, or a subset)
 into the live file in the template format from `references/skill-authoring.md`,
 setting `**Added:**` to the import date, `**Propagation:** opportunistic`,
@@ -30,6 +45,51 @@ each. The Origin marker is load-bearing: it tells every later review that
 the entry arrived without local evidence, so the pruning pass can drop it
 as freely as any single-observation rule. Imported principles that never
 fire in the adopter's own work should be removed, not kept out of respect.
+
+**Extend `Origin:` with the evidence that justified the entry** — one line
+naming the local artefact, after the `imported from starter set (#N)` part:
+
+```text
+**Origin:** imported from starter set (#3). Fits: a documented commit-message
+format failed seven times in this repo's history with no gate in front of it.
+```
+
+One line, written while the reason is still in hand. It is what makes the
+later pruning pass decidable: a principle whose cited evidence no longer
+holds is a clear removal, whereas an unexplained import is
+indistinguishable from an unexamined one at review time — so without the
+line the set can only ever grow, which is the outcome entry 11 exists to
+prevent.
+
+## Contents
+
+- 1. Open-source skills must include an open-source licence
+- 2. Open-source skills must include author attribution and a feedback pathway
+- 3. Skills with rules must include a pre-flight verification step
+- 4. Open-source skills must not contain client-identifying information
+- 5. Open-source skills must use tool-agnostic language, with concrete examples first
+- 6. Skills that generate structured output must be grounded in multiple real examples
+- 7. Subagents must have complete inputs and verified outputs
+- 8. Graceful tool-failure recovery
+- 9. Match interaction modality to conversation energy
+- 10. Small actionable sets are presented inline AND saved to file
+- 11. Skills require pruning, not just growth
+- 12. Use canonical identifiers from source data, never reconstruct from derived fields
+- 13. Skills that read or write workspace files must maintain a reference index
+- 14. Scheduled tasks invoke skills; they do not reimplement them
+- 15. Scheduled task prompts are lightweight orchestrators — intelligence lives in skills
+- 16. Interrupted operations are partial operations — verify state before retrying
+- 17. Never suggest manual typing of technical content as a workaround
+- 18. Browser automation is a costly last resort
+- 19. Skills recommending API access must note network-sandbox implications
+- 20. Skills contain only behaviour-changing content
+- 21. Use agent-agnostic language in open-source skills
+- 22. Verifying current vendor guidance requires a dated changelog check, not just the docs page
+- 23. Never aggregate across structurally different segments
+- 24. Fetch the instance before describing it
+- 25. One verified reason beats two, where the second is unchecked
+- 26. A companion skill must declare its coverage boundary
+- 27. Every skill ships as a bundle and is structured for progressive disclosure, regardless of size
 
 ---
 
