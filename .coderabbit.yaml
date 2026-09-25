@@ -17,15 +17,20 @@
 # only ever be closed with "reported upstream".
 #
 # That is not a reason to ignore what a reviewer spots — the findings are real
-# and they are filed against the upstream repository instead. Five reports
-# originated from this repository; upstream closed all five as completed on
-# 2026-09-20, and their fixes are present in the mirror as of `5cb73c4`
-# (task-observer 3.3.0). None is open today:
+# and they are filed against the upstream repository instead. The first five
+# reports (rebelytics #136-#140) were closed as completed upstream on
+# 2026-09-20; their fixes are in the mirror as of `5cb73c4` (task-observer
+# 3.3.0):
 #   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/136
 #   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/137
 #   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/138
 #   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/139
 #   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/140
+# Open since 2026-09-25, from the review of the vendor sync in #32:
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/222
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/223
+#   https://github.com/rebelytics/one-skill-to-rule-them-all/issues/224
+#   https://github.com/johnpapa/ai-ready/issues/64
 #
 # Everything outside `vendor/` is reviewed exactly as before. Listing only
 # exclusions means "everything except these", so there is no include list to
