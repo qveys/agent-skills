@@ -20,7 +20,7 @@ send 'openclaw doctor'    # sans bannière step avant
 
 **Obligatoire — utiliser `banner` :**
 ```bash
-COCKPIT=/Users/qveys/.claude/skills/wsh-cockpit/scripts/wsh-live.sh
+COCKPIT="<base directory of this skill>/scripts/wsh-live.sh"   # dossier affiché au chargement du skill
 
 $COCKPIT banner header "Théo Marceau — OpenClaw" "cockpit-theo-plan-225108"
 $COCKPIT banner phase  1 6 "Fondations & isolation"

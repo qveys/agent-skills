@@ -28,10 +28,10 @@ Pour une immersion complète plutôt que des one-shots : `tailscale ssh $H` puis
 
 ## Vue navigateur en lecture seule (ttyd)
 
-Si le skill **wsh-cockpit** est présent sur l'hôte et que la session relais est une session cockpit :
+Si le skill **wsh-cockpit** est présent sur l'hôte et que la session relais est une session cockpit (`<wsh-cockpit dir>` = dossier de base du skill wsh-cockpit, affiché à son chargement) :
 
 ```bash
-~/.claude/skills/wsh-cockpit/scripts/wsh-live.sh web start <session>   # ttyd sur 127.0.0.1:7681, read-only
+"<wsh-cockpit dir>/scripts/wsh-live.sh" web start <session>   # ttyd sur 127.0.0.1:7681, read-only
 tailscale serve --bg 7681                                              # exposé au tailnet en HTTPS
 # ... puis depuis l'iPhone : https://<hôte>.<tailnet>.ts.net
 # arrêt : tailscale serve reset && wsh-live.sh web stop <session>
