@@ -167,3 +167,4 @@ docker-compose.override.yml
 graphify-out/
 .tokensave
 .aider*
+.codegraph/
