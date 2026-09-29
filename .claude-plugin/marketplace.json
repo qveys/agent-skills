@@ -268,7 +268,7 @@
     {
       "name": "wait-what",
       "source": "./vendor/mattpocock-skills/wait-what",
-      "description": "Stop and explain a confusing or surprising agent action.",
+      "description": "Re-pitch the last message in plain terms when it did not land.",
       "strict": false
     },
     {
