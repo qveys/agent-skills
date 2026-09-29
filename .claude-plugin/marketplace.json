@@ -126,6 +126,168 @@
       "source": "./vendor/UditAkhourii-quicksilver/quicksilver",
       "description": "Offload bulk judgment calls (filter, classify, rank) to Jev",
       "strict": false
+    },
+    {
+      "name": "ask-matt",
+      "source": "./vendor/mattpocock-skills/ask-matt",
+      "description": "Ask which skill or flow fits your situation.",
+      "strict": false
+    },
+    {
+      "name": "code-review",
+      "source": "./vendor/mattpocock-skills/code-review",
+      "description": "Review changes since a fixed point against repo coding standards and spec.",
+      "strict": false
+    },
+    {
+      "name": "codebase-design",
+      "source": "./vendor/mattpocock-skills/codebase-design",
+      "description": "Shared vocabulary for designing deep modules.",
+      "strict": false
+    },
+    {
+      "name": "diagnosing-bugs",
+      "source": "./vendor/mattpocock-skills/diagnosing-bugs",
+      "description": "Diagnosis loop for hard bugs and performance regressions.",
+      "strict": false
+    },
+    {
+      "name": "domain-modeling",
+      "source": "./vendor/mattpocock-skills/domain-modeling",
+      "description": "Build and sharpen a project's domain model.",
+      "strict": false
+    },
+    {
+      "name": "grill-me",
+      "source": "./vendor/mattpocock-skills/grill-me",
+      "description": "A relentless interview to sharpen a plan or design.",
+      "strict": false
+    },
+    {
+      "name": "grill-with-docs",
+      "source": "./vendor/mattpocock-skills/grill-with-docs",
+      "description": "A relentless interview to sharpen a plan or design, which also creates docs (ADR's and glossary) as we go.",
+      "strict": false
+    },
+    {
+      "name": "grilling",
+      "source": "./vendor/mattpocock-skills/grilling",
+      "description": "Grill the user relentlessly about a plan, decision, or idea.",
+      "strict": false
+    },
+    {
+      "name": "handoff",
+      "source": "./vendor/mattpocock-skills/handoff",
+      "description": "Compact the current conversation into a handoff document for another agent to pick up.",
+      "strict": false
+    },
+    {
+      "name": "implement-spec",
+      "source": "./vendor/mattpocock-skills/implement-spec",
+      "description": "Implement the result of /to-spec and /to-tickets in code.",
+      "strict": false
+    },
+    {
+      "name": "implement",
+      "source": "./vendor/mattpocock-skills/implement",
+      "description": "Implement a piece of work based on a spec or set of tickets.",
+      "strict": false
+    },
+    {
+      "name": "improve-codebase-architecture",
+      "source": "./vendor/mattpocock-skills/improve-codebase-architecture",
+      "description": "Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.",
+      "strict": false
+    },
+    {
+      "name": "pr",
+      "source": "./vendor/mattpocock-skills/pr",
+      "description": "Use when writing a PR body.",
+      "strict": false
+    },
+    {
+      "name": "prototype",
+      "source": "./vendor/mattpocock-skills/prototype",
+      "description": "Build a throwaway prototype to answer a design question.",
+      "strict": false
+    },
+    {
+      "name": "research",
+      "source": "./vendor/mattpocock-skills/research",
+      "description": "Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo.",
+      "strict": false
+    },
+    {
+      "name": "retro",
+      "source": "./vendor/mattpocock-skills/retro",
+      "description": "Conduct a retrospective on a coding session.",
+      "strict": false
+    },
+    {
+      "name": "setup-matt-pocock-skills",
+      "source": "./vendor/mattpocock-skills/setup-matt-pocock-skills",
+      "description": "Configure this repo for the engineering skills: set up its issue tracker, triage label vocabulary, and domain doc layout.",
+      "strict": false
+    },
+    {
+      "name": "tdd",
+      "source": "./vendor/mattpocock-skills/tdd",
+      "description": "Test-driven development.",
+      "strict": false
+    },
+    {
+      "name": "teach",
+      "source": "./vendor/mattpocock-skills/teach",
+      "description": "Teach the user a new skill or concept, within this workspace.",
+      "strict": false
+    },
+    {
+      "name": "to-questionnaire",
+      "source": "./vendor/mattpocock-skills/to-questionnaire",
+      "description": "Turn a decision you can't fully answer into a questionnaire for someone else to fill in.",
+      "strict": false
+    },
+    {
+      "name": "to-spec",
+      "source": "./vendor/mattpocock-skills/to-spec",
+      "description": "Turn the current conversation into a spec and publish it to the project issue tracker: no interview, just synthesis of what you've already discussed.",
+      "strict": false
+    },
+    {
+      "name": "to-tickets",
+      "source": "./vendor/mattpocock-skills/to-tickets",
+      "description": "Break a plan or spec into tracer-bullet tickets with blocking edges, published to the tracker.",
+      "strict": false
+    },
+    {
+      "name": "triage",
+      "source": "./vendor/mattpocock-skills/triage",
+      "description": "Move issues and external PRs through a state machine of triage roles, categorise, verify, grill if needed, and write agent-ready briefs.",
+      "strict": false
+    },
+    {
+      "name": "wait-what",
+      "source": "./vendor/mattpocock-skills/wait-what",
+      "description": "Re-pitch the last message in plain terms when it did not land.",
+      "strict": false
+    },
+    {
+      "name": "wayfinder",
+      "source": "./vendor/mattpocock-skills/wayfinder",
+      "description": "Plan a huge chunk of work as a map of decision tickets and resolve them one at a time.",
+      "strict": false
+    },
+    {
+      "name": "wizard",
+      "source": "./vendor/mattpocock-skills/wizard",
+      "description": "Generate an interactive bash wizard that walks a human through steps only they can perform.",
+      "strict": false
+    },
+    {
+      "name": "writing-for-agents",
+      "source": "./vendor/mattpocock-skills/writing-for-agents",
+      "description": "Writing documents for agents.",
+      "strict": false
     }
   ]
 }
