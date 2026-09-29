@@ -84,3 +84,192 @@ sources:
     destination: vendor/UditAkhourii-quicksilver/quicksilver
     commit: 5d6fe5cd4f9d9a9d086a81c797e59b77c0724043
     syncedAt: 2026-09-25T19:41:00.799Z
+  ask-matt:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/ask-matt
+    destination: vendor/mattpocock-skills/ask-matt
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:14.557Z
+  diagnosing-bugs:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/diagnosing-bugs
+    destination: vendor/mattpocock-skills/diagnosing-bugs
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:15.826Z
+  grill-with-docs:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/grill-with-docs
+    destination: vendor/mattpocock-skills/grill-with-docs
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:17.032Z
+  triage:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/triage
+    destination: vendor/mattpocock-skills/triage
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:18.259Z
+  improve-codebase-architecture:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/improve-codebase-architecture
+    destination: vendor/mattpocock-skills/improve-codebase-architecture
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:19.452Z
+  setup-matt-pocock-skills:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/setup-matt-pocock-skills
+    destination: vendor/mattpocock-skills/setup-matt-pocock-skills
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:20.618Z
+  tdd:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/tdd
+    destination: vendor/mattpocock-skills/tdd
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:21.812Z
+  to-spec:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/to-spec
+    destination: vendor/mattpocock-skills/to-spec
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:23.037Z
+  to-tickets:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/to-tickets
+    destination: vendor/mattpocock-skills/to-tickets
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:24.251Z
+  wayfinder:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/wayfinder
+    destination: vendor/mattpocock-skills/wayfinder
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:25.430Z
+  implement:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/implement
+    destination: vendor/mattpocock-skills/implement
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:26.650Z
+  implement-spec:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/implement-spec
+    destination: vendor/mattpocock-skills/implement-spec
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:27.864Z
+  prototype:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/prototype
+    destination: vendor/mattpocock-skills/prototype
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:29.123Z
+  research:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/research
+    destination: vendor/mattpocock-skills/research
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:30.323Z
+  domain-modeling:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/domain-modeling
+    destination: vendor/mattpocock-skills/domain-modeling
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:31.526Z
+  codebase-design:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/codebase-design
+    destination: vendor/mattpocock-skills/codebase-design
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:32.792Z
+  code-review:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/code-review
+    destination: vendor/mattpocock-skills/code-review
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:34.071Z
+  pr:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/pr
+    destination: vendor/mattpocock-skills/pr
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:35.292Z
+  retro:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/retro
+    destination: vendor/mattpocock-skills/retro
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:36.519Z
+  wizard:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/wizard
+    destination: vendor/mattpocock-skills/wizard
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:37.712Z
+  grill-me:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/grill-me
+    destination: vendor/mattpocock-skills/grill-me
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:38.875Z
+  grilling:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/grilling
+    destination: vendor/mattpocock-skills/grilling
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:40.063Z
+  handoff:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/handoff
+    destination: vendor/mattpocock-skills/handoff
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:41.256Z
+  teach:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/teach
+    destination: vendor/mattpocock-skills/teach
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:42.398Z
+  to-questionnaire:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/to-questionnaire
+    destination: vendor/mattpocock-skills/to-questionnaire
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:43.599Z
+  wait-what:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/wait-what
+    destination: vendor/mattpocock-skills/wait-what
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:44.766Z
+  writing-for-agents:
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/writing-for-agents
+    destination: vendor/mattpocock-skills/writing-for-agents
+    commit: d81f3a183412e71a5b1e84ca21bc1a35eea03a60
+    syncedAt: 2026-09-29T23:06:45.970Z

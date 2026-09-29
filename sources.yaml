@@ -83,3 +83,192 @@ sources:
     path: skills/quicksilver
     destination: vendor/UditAkhourii-quicksilver/quicksilver
     enabled: true
+
+  - id: ask-matt
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/ask-matt
+    destination: vendor/mattpocock-skills/ask-matt
+    enabled: true
+
+  - id: diagnosing-bugs
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/diagnosing-bugs
+    destination: vendor/mattpocock-skills/diagnosing-bugs
+    enabled: true
+
+  - id: grill-with-docs
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/grill-with-docs
+    destination: vendor/mattpocock-skills/grill-with-docs
+    enabled: true
+
+  - id: triage
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/triage
+    destination: vendor/mattpocock-skills/triage
+    enabled: true
+
+  - id: improve-codebase-architecture
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/improve-codebase-architecture
+    destination: vendor/mattpocock-skills/improve-codebase-architecture
+    enabled: true
+
+  - id: setup-matt-pocock-skills
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/setup-matt-pocock-skills
+    destination: vendor/mattpocock-skills/setup-matt-pocock-skills
+    enabled: true
+
+  - id: tdd
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/tdd
+    destination: vendor/mattpocock-skills/tdd
+    enabled: true
+
+  - id: to-spec
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/to-spec
+    destination: vendor/mattpocock-skills/to-spec
+    enabled: true
+
+  - id: to-tickets
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/to-tickets
+    destination: vendor/mattpocock-skills/to-tickets
+    enabled: true
+
+  - id: wayfinder
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/wayfinder
+    destination: vendor/mattpocock-skills/wayfinder
+    enabled: true
+
+  - id: implement
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/implement
+    destination: vendor/mattpocock-skills/implement
+    enabled: true
+
+  - id: implement-spec
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/implement-spec
+    destination: vendor/mattpocock-skills/implement-spec
+    enabled: true
+
+  - id: prototype
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/prototype
+    destination: vendor/mattpocock-skills/prototype
+    enabled: true
+
+  - id: research
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/research
+    destination: vendor/mattpocock-skills/research
+    enabled: true
+
+  - id: domain-modeling
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/domain-modeling
+    destination: vendor/mattpocock-skills/domain-modeling
+    enabled: true
+
+  - id: codebase-design
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/codebase-design
+    destination: vendor/mattpocock-skills/codebase-design
+    enabled: true
+
+  - id: code-review
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/code-review
+    destination: vendor/mattpocock-skills/code-review
+    enabled: true
+
+  - id: pr
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/pr
+    destination: vendor/mattpocock-skills/pr
+    enabled: true
+
+  - id: retro
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/retro
+    destination: vendor/mattpocock-skills/retro
+    enabled: true
+
+  - id: wizard
+    repo: mattpocock/skills
+    ref: main
+    path: skills/engineering/wizard
+    destination: vendor/mattpocock-skills/wizard
+    enabled: true
+
+  - id: grill-me
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/grill-me
+    destination: vendor/mattpocock-skills/grill-me
+    enabled: true
+
+  - id: grilling
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/grilling
+    destination: vendor/mattpocock-skills/grilling
+    enabled: true
+
+  - id: handoff
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/handoff
+    destination: vendor/mattpocock-skills/handoff
+    enabled: true
+
+  - id: teach
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/teach
+    destination: vendor/mattpocock-skills/teach
+    enabled: true
+
+  - id: to-questionnaire
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/to-questionnaire
+    destination: vendor/mattpocock-skills/to-questionnaire
+    enabled: true
+
+  - id: wait-what
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/wait-what
+    destination: vendor/mattpocock-skills/wait-what
+    enabled: true
+
+  - id: writing-for-agents
+    repo: mattpocock/skills
+    ref: main
+    path: skills/productivity/writing-for-agents
+    destination: vendor/mattpocock-skills/writing-for-agents
+    enabled: true
