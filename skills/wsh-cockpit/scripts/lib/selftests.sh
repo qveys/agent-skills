@@ -2585,18 +2585,9 @@ cmd_selftest_adopt() {
     report_adopt_case "6a N>1 sans préfixe ni last-session -> rc=2 explicite" 1 "rc6a=$rc6a"
   fi
 
-  # 6b. Même condition, bout en bout via le vrai `spawn` — le rc=2 sort
-  #     avant la création, donc avant tout "$0 open".
-  set +e
-  errspawnamb=$(WSH_COCKPIT_AGENT="$ADOPT_KEY" "$SCRIPT_DIR/wsh-live.sh" spawn 2>&1)
-  rcspawnamb=$?
-  set -e
-  if [ "$rcspawnamb" -eq 2 ]; then
-    report_adopt_case "6b spawn (sous-processus réel) surface la même ambiguïté" 0
-  else
-    report_adopt_case "6b spawn (sous-processus réel) surface la même ambiguïté" 1 \
-      "rcspawnamb=$rcspawnamb err='$errspawnamb'"
-  fi
+  # 6b. (retiré) spawn sans préfixe en cas ambigu ouvre désormais un cockpit
+  #     NEUF (wsh-live.sh spawn) au lieu de rc=2 — l'exercer bout en bout
+  #     ouvrirait un bloc Wave ; rc=2 reste celui de find_*_session (6a).
 
   # 6c. Une last-session appartenant au registre départage l'ambiguïté.
   remember_session "$sess_a"
@@ -4016,4 +4007,22 @@ cmd_selftest_docs() {
 
   if [ "$failures" -eq 0 ]; then echo "selftest-docs: all cases passed"; return 0
   else echo "selftest-docs: $failures failure(s)" >&2; return 1; fi
+}
+
+# selftest-situate: hostname comparison + wrapped-line capture, no Wave, no network.
+cmd_selftest_situate() {
+  local failures=0 t="cockpit-selftest-situate-$$" host="MacBookPro-de-Quentin.local" out
+  chk() { [ "$2" = ok ] || { echo "FAIL: $1" >&2; failures=$((failures+1)); }; }
+  same_host "$host" "$host" && chk "same host" ok || chk "same host" no
+  same_host "MacBookPro-de-Quentin" "$host" && chk ".local insensitive" ok || chk ".local insensitive" no
+  ! same_host "MacBookPro-de-Quenti" "$host" && chk "truncated differs" ok || chk "truncated differs" no
+  # Narrow pane (37 cols): the marker line wraps mid-hostname; read must re-join it.
+  tmux new-session -d -x 37 -y 10 -s "$t" 2>/dev/null || { echo "selftest-situate: skip (tmux)"; return 0; }
+  tmux send-keys -t "$t" "clear; printf 'WSH_SITUATE_HOST=%s\\n' '$host'" Enter
+  sleep 1
+  out=$(mux_capture "$t" 20 | grep -o '^WSH_SITUATE_HOST=.*' | tail -n1 | cut -d= -f2-)
+  tmux kill-session -t "$t" 2>/dev/null
+  [ "$out" = "$host" ] && chk "wrapped marker re-joined" ok || { chk "wrapped marker re-joined ($out)" no; }
+  [ "$failures" -eq 0 ] || { echo "selftest-situate: $failures failure(s)" >&2; return 1; }
+  echo "selftest-situate: ok"
 }

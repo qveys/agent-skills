@@ -171,6 +171,8 @@
 #                              claim, orphan replacement under race, reserved-key refusal,
 #                              two-line format readback; pure filesystem, no tmux session
 #                              needed; rc 0/1
+#   selftest-situate           situate hostname: .local-insensitive compare + wrapped
+#                              marker line re-joined by read (narrow tmux pane); rc 0/1
 #   selftest-adopt             registry-at-creation (step-1.3, spec v12 §2 étape 1):
 #                              spawn/start pose a creator claim + registered prefix;
 #                              A/B/A alternation never misroutes; two distinct prefixes
@@ -324,6 +326,9 @@ sub="${1:-}"; shift || true
 # human-readable hostname/pwd/whoami trio) so this function can auto-detect a
 # remote hop and flip sticky remote mode ON, without the caller having to notice
 # the mismatch itself and issue a separate `remote-init` call.
+# Bonjour-insensitive host comparison: macOS `hostname` may carry ".local".
+same_host() { [ "$(printf '%s' "${1%.local}" | tr A-Z a-z)" = "$(printf '%s' "${2%.local}" | tr A-Z a-z)" ]; }
+
 situate_session() {
   local sess="$1"
   # Force inline framing for the probe itself (never trust the session's
@@ -349,7 +354,7 @@ situate_session() {
   # <host>`, run just before this) already primed remote mode for real — a
   # session already in remote mode has either been pre-pushed or already had
   # remote-init run on it; situate must not clobber that.
-  if [ -n "$remote_host" ] && [ "$remote_host" != "$(hostname)" ] && ! remote_mode_get "$sess"; then
+  if [ -n "$remote_host" ] && ! same_host "$remote_host" "$(hostname)" && ! remote_mode_get "$sess"; then
     # `hostname` on macOS returns the Bonjour/mDNS name (foo.local), which
     # `tailscale ssh`/`scp` generally do NOT resolve (they want the bare
     # MagicDNS name, e.g. "foo") — strip a trailing .local so the best-effort
@@ -676,25 +681,31 @@ spawn)
   fi
 
   ADOPTED_NOW=0
+  AMBIG=0
   if [ "$FORCE" -eq 0 ]; then
     NORM=$(normalize_prefix "$PREFIX")
     RC=0
     SESS=$(find_registry_session "$PREFIX" "$NORM") || RC=$?
     if [ "$RC" -eq 2 ]; then
-      echo "ambiguous: more than one of your sessions (registry) matches and none is the last-used one — pass a prefix to disambiguate, or --force for a fresh cockpit" >&2
-      exit 2
+      # No prefix asked: never block, never adopt a session that isn't clearly
+      # the last-used one — open a fresh cockpit instead. A requested prefix
+      # still fails loud (the caller named something, guessing would be wrong).
+      [ -z "$PREFIX" ] || { echo "ambiguous: more than one of your sessions (registry) matches and none is the last-used one — pass a prefix to disambiguate, or --force for a fresh cockpit" >&2; exit 2; }
+      echo "ambiguous: several of your sessions match and none is the last-used one — opening a fresh cockpit"
+      RC=1; AMBIG=1
     fi
-    if [ "$RC" -ne 0 ] && try_adopt_session "$PREFIX" "$NORM"; then
+    if [ "$RC" -ne 0 ] && [ "$AMBIG" -eq 0 ] && try_adopt_session "$PREFIX" "$NORM"; then
       SESS="$ADOPT_RESULT"
       RC=0
       ADOPTED_NOW=1
     fi
-    if [ "$RC" -ne 0 ]; then
+    if [ "$RC" -ne 0 ] && [ "$AMBIG" -eq 0 ]; then
       RC=0
       SESS=$(find_reusable_session "$PREFIX") || RC=$?
       if [ "$RC" -eq 2 ]; then
-        echo "ambiguous: more than one of your sessions (registry) matches and none is the last-used one — pass a prefix to disambiguate, or --force for a fresh cockpit" >&2
-        exit 2
+        [ -z "$PREFIX" ] || { echo "ambiguous: more than one of your sessions (registry) matches and none is the last-used one — pass a prefix to disambiguate, or --force for a fresh cockpit" >&2; exit 2; }
+        echo "ambiguous: several of your sessions match and none is the last-used one — opening a fresh cockpit"
+        RC=1; AMBIG=1
       fi
       # find_reusable_session hands back an unclaimed session only via its
       # legacy fallback (a registry hit is always already claimed by ME) —
@@ -767,6 +778,21 @@ status)
     else
       echo "last session: (none recorded)"
     fi
+  fi
+  # Same view spawn resolves from: live sessions claimed by MY key (registry),
+  # narrowed to the registered prefix when one was asked.
+  mine=""
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    [ "$(claim_read_key "$(claim_path "$(session_slug "$s")")" 2>/dev/null)" = "$(agent_claim_key)" ] || continue
+    [ -z "$PREFIX" ] || [ "$(prefix_read "$s" 2>/dev/null)" = "$norm" ] || continue
+    mine="$mine $s"
+  done < <(mux_list_sessions)
+  if [ -n "$mine" ]; then
+    echo "my sessions (registry):"
+    printf '  %s\n' $mine
+  else
+    echo "my sessions (registry): (none)"
   fi
   matches=$(mux_list_sessions | grep "^cockpit-${norm}-" || true)
   if [ -n "$matches" ]; then
@@ -1310,6 +1336,9 @@ selftest-wrapper)
 selftest-attach)
   cmd_selftest_attach
   ;;
+selftest-situate)
+  cmd_selftest_situate
+  ;;
 push)
   have_mux
   # [session] is genuinely optional: with only <local> <remote-path> the
@@ -1605,5 +1634,5 @@ release)
   fi
   ;;
 *)
-  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach} [args]" >&2; exit 2 ;;
+  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach|selftest-situate} [args]" >&2; exit 2 ;;
 esac

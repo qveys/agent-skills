@@ -12,8 +12,8 @@ steps, each gated by an atomic claim (mechanics: `docs/internals.md`) :
 
 1. **Registry** — among *my own* sessions (claimed under my
    `WSH_COCKPIT_AGENT`/`WSH_COCKPIT_PREFIX` key), filtered by prefix if one was
-   passed → reuse. Several matches with no last-used → refuses (exit 2,
-   ambiguous) rather than silently pick one.
+   passed → reuse. Several matches with no last-used → prefix: refuses (exit 2);
+   none: opens a fresh cockpit.
 2. **Adoption** (`WSH_COCKPIT_ADOPT` only) — claim each listed session in order,
    run the **mandatory** `hostname; pwd; whoami` probe, finalize only if the
    probe succeeds. A failed probe rolls the claim back.
