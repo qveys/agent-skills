@@ -2585,9 +2585,49 @@ cmd_selftest_adopt() {
     report_adopt_case "6a N>1 sans préfixe ni last-session -> rc=2 explicite" 1 "rc6a=$rc6a"
   fi
 
-  # 6b. (retiré) spawn sans préfixe en cas ambigu ouvre désormais un cockpit
-  #     NEUF (wsh-live.sh spawn) au lieu de rc=2 — l'exercer bout en bout
-  #     ouvrirait un bloc Wave ; rc=2 reste celui de find_*_session (6a).
+  # 6b. spawn (binaire réel, `wsh` masqué du PATH : open échoue tôt, exit 5,
+  #     AVANT tout wsh run -> aucun effet Wave, même astuce que le cas 20).
+  #     Sans préfixe, N>1 candidats sans last-used -> cockpit NEUF (plus de
+  #     rc=2) ; avec un préfixe ambigu (2 sessions du même préfixe) -> rc=2.
+  NOWSH_PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  sess_c="selftest-adopt-c-$$"
+  WSH_COCKPIT_AGENT="$ADOPT_KEY" "$SCRIPT_DIR/wsh-live.sh" start "$sess_c" >/dev/null 2>&1
+  created+=("$sess_c")
+  prefix_write "$sess_c" "$pfx_a"
+  rm -f "$(state_file)" 2>/dev/null || true
+  set +e
+  out6b=$(WSH_COCKPIT_AGENT="$ADOPT_KEY" PATH="$NOWSH_PATH" "$SCRIPT_DIR/wsh-live.sh" spawn 2>&1)
+  rc6b=$?
+  rm -f "$(state_file)" 2>/dev/null || true
+  out6bp=$(WSH_COCKPIT_AGENT="$ADOPT_KEY" PATH="$NOWSH_PATH" "$SCRIPT_DIR/wsh-live.sh" spawn "adopt-pfx-a-$$" 2>&1)
+  rc6bp=$?
+  set -e
+  sess6b_new=$(printf '%s\n' "$out6b" | sed -n "s/^created fresh .* session '\(.*\)'\$/\1/p")
+  created+=("${sess6b_new:-selftest-adopt-6b-none-$$}")
+  if [ -n "$sess6b_new" ] && mux_has "$sess6b_new" && [ "$rc6b" -ne 2 ] \
+     && printf '%s\n' "$out6b" | grep -q 'opening a fresh cockpit' \
+     && [ "$rc6bp" -eq 2 ] && ! printf '%s\n' "$out6bp" | grep -q 'created fresh'; then
+    report_adopt_case "6b spawn sans préfixe ambigu -> cockpit neuf ; avec préfixe ambigu -> rc=2" 0
+  else
+    report_adopt_case "6b spawn sans préfixe ambigu -> cockpit neuf ; avec préfixe ambigu -> rc=2" 1 \
+      "rc6b=$rc6b sess6b_new='$sess6b_new' rc6bp=$rc6bp out6b='$out6b' out6bp='$out6bp'"
+  fi
+  teardown_session "$sess_c" >/dev/null 2>&1 || true
+  rm -f "$(state_file)" 2>/dev/null || true
+
+  # 6d. `status` liste mes sessions vivantes du registre (ma clé), "(none)"
+  #     pour une clé sans session.
+  set +e
+  out6d=$(WSH_COCKPIT_AGENT="$ADOPT_KEY" "$SCRIPT_DIR/wsh-live.sh" status 2>&1)
+  out6dn=$(WSH_COCKPIT_AGENT="selftest-adopt-nobody-$$" "$SCRIPT_DIR/wsh-live.sh" status 2>&1)
+  set -e
+  if printf '%s\n' "$out6d" | grep -q '^my sessions (registry):$' \
+     && printf '%s\n' "$out6d" | grep -q "^  $sess_a\$" \
+     && printf '%s\n' "$out6dn" | grep -q '^my sessions (registry): (none)$'; then
+    report_adopt_case "6d status liste mes sessions (registre) / (none)" 0
+  else
+    report_adopt_case "6d status liste mes sessions (registre) / (none)" 1 "out='$out6d' none='$out6dn'"
+  fi
 
   # 6c. Une last-session appartenant au registre départage l'ambiguïté.
   remember_session "$sess_a"
