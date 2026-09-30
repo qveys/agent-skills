@@ -64,7 +64,8 @@ mux_send_line() {  # $1 sess  $2 text — type text, then Enter
 }
 mux_capture() {  # $1 sess  $2 lines of scrollback to look back
   if [ "$MUX" = tmux ]; then
-    tmux capture-pane -pt "$1" -S "-$2" 2>/dev/null
+    # -J: re-join wrapped lines (a narrow pane split WSH_SITUATE_HOST=… mid-hostname)
+    tmux capture-pane -pJt "$1" -S "-$2" 2>/dev/null
   else
     local zb pane; zb=$(zellij_bin); pane=$(zellij_pane "$1")
     if [ -n "$pane" ]; then
