@@ -83,6 +83,10 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 - **Chaque sous-agent exporte son propre `WSH_COCKPIT_AGENT`** (jamais `user-preopen-*`/`released`) ; idem `WSH_COCKPIT_PREFIX` entre agents parallèles.
 - **Un nom de session est littéral**, jamais un préfixe abrégé.
 
+## Piloter un TUI (Claude Code, REPL) — pas avec `send`
+
+Dans un TUI, `send` n'a pas de sens (pas de marqueurs `exit`) : parler à `tmux send-keys`. Jamais `<texte>` et `Enter` dans le même appel pour un texte long — l'Entrée est avalée. Faire texte, `sleep 2`, puis `Enter`, et **relire le pane** avant de déclarer « envoyé ». Au-delà de ~500 caractères, passer par un fichier. `docs/tui-driving.md`.
+
 ## Bannières
 
 ```bash
