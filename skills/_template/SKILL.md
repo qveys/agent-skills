@@ -1,6 +1,8 @@
 ---
 name: template-skill
 description: A template skill to demonstrate the structure.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Template Skill
