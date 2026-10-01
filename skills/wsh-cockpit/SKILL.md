@@ -85,13 +85,7 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 
 ## Piloter un TUI (Claude Code, REPL) — pas avec `send`
 
-`send` est framé pour un shell. Dans un TUI, `tmux send-keys '<texte>' Enter` en un seul appel échoue avec un texte long (testé : Entrée avalé, texte bloqué dans `❯`, puis 2 Entrée de plus avalés avant que le 3e passe). Un texte court passe, ne pas s'y fier.
-
-1. `tmux send-keys -t "$SESS" '<texte>'` (sans Enter)
-2. `sleep 2`, puis `tmux send-keys -t "$SESS" Enter` (testé : un seul Entrée suffit, `Enter` ou `C-m`)
-3. relire le pane : le texte a quitté `❯` et le TUI travaille. Sinon renvoyer `Enter` (jusqu'à 3 fois) et revérifier. Ne jamais déclarer « envoyé » sans cette lecture.
-
-**Limite de longueur** : ~600 caractères passent avec la pause de 2 s ; ~1 600 caractères sont arrivés TRONQUÉS (seule la fin reçue, début perdu), même avec la pause. Seuil exact non mesuré. Au-delà de ~500 caractères : écrire la consigne dans un fichier (scratchpad ou vault) et envoyer une phrase courte du type `Lis <chemin> et exécute-la à la lettre.` ; puis relire le pane (étape 3) pour vérifier que l'agent a lu le fichier.
+Dans un TUI, `send` n'a pas de sens (pas de marqueurs `exit`) : parler à `tmux send-keys`. Jamais `<texte>` et `Enter` dans le même appel pour un texte long — l'Entrée est avalée. Faire texte, `sleep 2`, puis `Enter`, et **relire le pane** avant de déclarer « envoyé ». Au-delà de ~500 caractères, passer par un fichier. `docs/tui-driving.md`.
 
 ## Bannières
 

@@ -185,8 +185,14 @@ deviner". Mécanique (`@[wsh_seq]`, polling du pane) : `docs/internals.md`.
 
 ## Texte tapé dans un TUI sans Entrée effectif
 
-`tmux send-keys '<texte>' Enter` dans un TUI Claude Code avec un texte long : Entrée avalé, message bloqué dans la saisie, et les 2 Entrée suivants aussi (reproduit 2 fois, essai n°3 OpenCodeMobile). Texte, pause de 2 s, puis Entrée : un seul suffit. Toujours relire le pane. Voir « Piloter un TUI » dans SKILL.md.
+`tmux send-keys '<texte>' Enter` dans un TUI Claude Code avec un texte long :
+Entrée avalé, message bloqué dans la saisie, et les 2 Entrée suivants aussi
+(reproduit 2 fois, essai n°3 OpenCodeMobile). Texte, pause de 2 s, puis Entrée :
+un seul suffit. Toujours relire le pane. Recette : `docs/tui-driving.md`.
 
 ## Texte long tronqué dans un TUI
 
-Un texte d'environ 1 600 caractères envoyé par `tmux send-keys` dans un TUI Claude Code est arrivé tronqué (début perdu), pause de 2 s comprise. Au-delà de ~500 caractères, passer par un fichier et envoyer une phrase courte qui y renvoie. Voir « Limite de longueur » dans SKILL.md.
+Un texte d'environ 1 600 caractères envoyé par `tmux send-keys` dans un TUI
+Claude Code est arrivé tronqué (début perdu), pause de 2 s comprise. Au-delà de
+~500 caractères, passer par un fichier et envoyer une phrase courte qui y
+renvoie. Mesures : `docs/tui-driving.md`.
