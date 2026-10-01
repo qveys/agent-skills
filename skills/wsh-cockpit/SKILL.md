@@ -83,6 +83,16 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 - **Chaque sous-agent exporte son propre `WSH_COCKPIT_AGENT`** (jamais `user-preopen-*`/`released`) ; idem `WSH_COCKPIT_PREFIX` entre agents parallèles.
 - **Un nom de session est littéral**, jamais un préfixe abrégé.
 
+## Piloter un TUI (Claude Code, REPL) — pas avec `send`
+
+`send` est framé pour un shell. Dans un TUI, `tmux send-keys '<texte>' Enter` en un seul appel échoue avec un texte long (testé : Entrée avalé, texte bloqué dans `❯`, puis 2 Entrée de plus avalés avant que le 3e passe). Un texte court passe, ne pas s'y fier.
+
+1. `tmux send-keys -t "$SESS" '<texte>'` (sans Enter)
+2. `sleep 2`, puis `tmux send-keys -t "$SESS" Enter` (testé : un seul Entrée suffit, `Enter` ou `C-m`)
+3. relire le pane : le texte a quitté `❯` et le TUI travaille. Sinon renvoyer `Enter` (jusqu'à 3 fois) et revérifier. Ne jamais déclarer « envoyé » sans cette lecture.
+
+**Limite de longueur** : ~600 caractères passent avec la pause de 2 s ; ~1 600 caractères sont arrivés TRONQUÉS (seule la fin reçue, début perdu), même avec la pause. Seuil exact non mesuré. Au-delà de ~500 caractères : écrire la consigne dans un fichier (scratchpad ou vault) et envoyer une phrase courte du type `Lis <chemin> et exécute-la à la lettre.` ; puis relire le pane (étape 3) pour vérifier que l'agent a lu le fichier.
+
 ## Bannières
 
 ```bash
