@@ -39,7 +39,9 @@ Les commandes ci-dessous sont relatives au dossier du skill (annoncé à l'invoc
    Remplacer `ID8` par les 8 premiers caractères de l'UUID de la session courante (visible
    dans le chemin du scratchpad) — ne pas copier de chevrons (`<…>`), le shell les interpréterait
    comme une redirection.
-   Une ligne par session : `PROJET|ID8|DERNIERE_ACTIVITE|TAILLE|TYPE_DERNIERE_ENTREE|intr=N|TAG|SUJET|…FIN`.
+   Une ligne par session : `PROJET|UUID|DERNIERE_ACTIVITE|TAILLE|TYPE_DERNIERE_ENTREE|intr=N|TAG|SUJET|…FIN`.
+   `UUID` = identifiant complet, le seul que `claude --resume` accepte (l'ID8 est refusé). Les
+   `ID8` (8 premiers caractères) ne servent qu'à `--exclude`, `dispose.sh` et `# AGG|VIDE|ids=`.
    La sortie est **pré-triée** : les reviews CI (`AUTO_SECREVIEW`), les préchauffages
    (`PREWARM`, LaunchAgent) et les sessions vides (ni sujet ni texte assistant) ne sortent plus
    en lignes individuelles — elles sont comptées et regroupées en lignes d'agrégat `# AGG|…` en
@@ -96,6 +98,11 @@ Les commandes ci-dessous sont relatives au dossier du skill (annoncé à l'invoc
    ## 📅 Sessions, jour par jour        ← un bloc ### par jour, ordre chronologique
    ### <Jour JJ/MM>
    | Session | Projet | Chantier / tâche | Verdict | Reste à faire |
+   (colonne Session = UUID COMPLET, jamais l'ID8 ; le `--resume` ne marche que depuis le cwd
+   de la session. Donner la commande exacte par ligne 🟡 ⏸️ ❌, cwd lu dans le transcript :
+   `cwd=$(grep -m1 -o '"cwd":"[^"]*"' ~/.claude/projects/*/UUID.jsonl | cut -d'"' -f4)`
+   → `cd "<cwd>" && claude --resume <UUID>`. Le nom de dossier de `PROJET` est lossy, ne pas
+   s'en servir pour déduire le cwd.)
    (lignes = uniquement les sessions 🟡 ⏸️ ❌ ; puis UNE ligne de synthèse par jour :
    « ✅ N terminées — chantiers : mémoire centralisée, wsh-cockpit-optim… » ; ⚪ idem en synthèse)
 
