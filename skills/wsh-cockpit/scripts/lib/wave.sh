@@ -237,26 +237,41 @@ block_id_store() {
   printf '%s\n' "$id" >"$(block_id_file "$sess")" 2>/dev/null || true
 }
 
-# Best-effort close of a block-<slug> marker given its PATH directly — the
-# primitive block_id_close(sess) below wraps. Split out (step-1.7) so gc's
-# marker-hygiene pass can close a DEAD session's block the same way even
-# though it only ever has the marker file (a slug), never the session's
-# original un-slugified name that block_id_file(sess) would need to
-# re-derive the same path.
+# Close the block a block-<slug> marker records, given the marker PATH — the
+# primitive block_id_close(sess) below wraps (gc's hygiene pass only has the
+# marker, never the original session name).
+#
+# Only the recorded id is ever targeted, never a scan. The id goes as an oref
+# (`block:<uuid>`): a BARE uuid makes wsh resolve it relative to
+# WAVETERM_BLOCKID, which the agent's shell does not have ("resolving blockid:
+# no WAVETERM_BLOCKID env var set") — the old silent failure that left the
+# "detached or ended" block on screen. A block already gone from
+# `wsh blocks list` (closed by the user) is success. Anything else that leaves
+# the block listed is reported on stderr and returns 1.
 block_id_close_path() {  # $1 marker path (block-<slug>)
-  local bf="$1" id
+  local bf="$1" id list i
   [ -f "$bf" ] || return 0
   id=$(tr -d '[:space:]' <"$bf" 2>/dev/null || true)
   rm -f "$bf" 2>/dev/null || true
-  [ -n "$id" ] || return 0
-  command -v wsh >/dev/null 2>&1 || return 0
-  wsh deleteblock -b "$id" >/dev/null 2>&1 || true
+  case "$id" in ''|*[!0-9a-fA-F-]*) return 0 ;; esac
+  if ! command -v wsh >/dev/null 2>&1; then
+    echo "wsh-cockpit: wsh not found — Wave block $id left open, close it by hand" >&2
+    return 1
+  fi
+  for i in 0 1 2 3 4 5; do
+    if ! list=$(wsh blocks list --json 2>/dev/null); then
+      echo "wsh-cockpit: \`wsh blocks list\` failed — can't confirm Wave block $id is closed" >&2
+      return 1
+    fi
+    case "$list" in *"\"$id\""*) ;; *) return 0 ;; esac
+    if [ "$i" -eq 0 ]; then wsh deleteblock -b "block:$id" >/dev/null 2>&1 || true
+    else sleep 0.2; fi
+  done
+  echo "wsh-cockpit: failed to close Wave block $id (still in \`wsh blocks list\`) — run: wsh deleteblock -b block:$id" >&2
+  return 1
 }
 
-# Best-effort close of the block remembered for $sess, called from
-# teardown_session. Never fails the caller: no state file, no `wsh`, or a
-# block that already auto-closed ("not found") are all silently fine — only
-# the specific id `open` recorded is ever targeted, never a pane scan.
+# Close the block remembered for $sess, called from teardown_session.
 block_id_close() {
   block_id_close_path "$(block_id_file "$1")"
 }
@@ -275,33 +290,4 @@ tab_describe() {
   count=$(sqlite3 "$ro" "SELECT count(*) FROM db_tab;" 2>/dev/null)
   [ -n "$name" ] || return 1
   printf '%s|%s\n' "$name" "${count:-1}"
-}
-
-# Delete a Wave block by id (used by `stop` so killing the cockpit also removes
-# the visible block, not just the tmux session). `wsh` needs an RPC context: from
-# a non-Wave shell (the agent's tool shell) WAVETERM_* is unset and wsh errors
-# "no workspaces found", so we resolve the block's own tab + workspace from the
-# state DB (read-only) and pass them via env — mirroring how `open` runs `wsh run`.
-# Best-effort: silent no-op if wsh/sqlite3 is missing, the block is already gone,
-# or no context can be resolved (never blocks `stop`). Returns non-zero when the
-# block was NOT actually deleted, so callers can report an accurate status
-# instead of assuming success.
-wave_delete_block() {
-  local bid="$1" ro tab ws
-  [ -n "$bid" ] || return 1
-  # bid comes from a user-writable state file and is interpolated into a LIKE
-  # query below — reject anything that isn't a UUID-like hex/dash string before
-  # it ever reaches sqlite3.
-  case "$bid" in *[!0-9a-fA-F-]*) return 1 ;; esac
-  command -v wsh >/dev/null 2>&1 || return 1
-  ro=$(wave_db_ro) || ro=""
-  if [ -n "$ro" ]; then
-    tab=$(sqlite3 "$ro" "SELECT oid FROM db_tab WHERE data LIKE '%${bid//\'/}%' LIMIT 1;" 2>/dev/null)
-    [ -n "$tab" ] || tab=$(resolve_live_tab 2>/dev/null || true)
-    [ -n "$tab" ] && ws=$(sqlite3 "$ro" \
-      "SELECT oid FROM db_workspace WHERE data LIKE '%${tab//\'/}%' LIMIT 1;" 2>/dev/null)
-  fi
-  WAVETERM_TABID="${tab:-${WAVETERM_TABID:-}}" \
-  WAVETERM_WORKSPACEID="${ws:-${WAVETERM_WORKSPACEID:-}}" \
-    wsh deleteblock -b "$bid" >/dev/null 2>&1
 }

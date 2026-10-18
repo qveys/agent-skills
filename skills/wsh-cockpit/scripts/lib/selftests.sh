@@ -4075,3 +4075,99 @@ cmd_selftest_situate() {
   [ "$failures" -eq 0 ] || { echo "selftest-situate: $failures failure(s)" >&2; return 1; }
   echo "selftest-situate: ok"
 }
+
+# Block lifecycle: `open` records the Wave block it creates and stop/gc close
+# exactly that block — verified gone from `wsh blocks list`, a block the user
+# already closed is fine, a failed deleteblock is reported on stderr, and an
+# unrecorded block (the user's own terminal) is never touched. Runs against a
+# fake `wsh` on PATH (run / blocks list / deleteblock / wavepath + a throwaway
+# Wave DB) and a throwaway STATE_DIR — never touches a real Wave block. `spawn`
+# is not driven directly (its background gc sweep would act on the user's real
+# sessions); it opens its block through this same `open`. tmux-only; rc 0/1.
+cmd_selftest_block() {
+  if [ "$MUX" != tmux ]; then echo "selftest-block: skip (tmux-only)"; return 0; fi
+  if ! command -v sqlite3 >/dev/null 2>&1; then echo "selftest-block: skip (no sqlite3)"; return 0; fi
+  have_mux
+  # NOT local: the EXIT trap runs after this function has returned.
+  BLK_FAKE=$(mktemp -d "${TMPDIR:-/tmp}/wsh-selftest-block.XXXXXX")
+  BLK_PFX="cockpit-zz-selftest-block-$$"
+  local failures=0 user_blk="11111111-1111-1111-1111-111111111111" s id err rc
+  trap 'for s in 1 2 3 4; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
+
+  chk() { if [ "$2" -eq 0 ]; then echo "ok $1"; else echo "FAIL $1${3:+: $3}" >&2; failures=$((failures + 1)); fi; }
+
+  mkdir -p "$BLK_FAKE/wave/db" "$BLK_FAKE/state"
+  sqlite3 "$BLK_FAKE/wave/db/waveterm.db" \
+    "CREATE TABLE db_tab(oid TEXT, data TEXT); CREATE TABLE db_workspace(oid TEXT, data TEXT);
+     INSERT INTO db_tab VALUES('faketab','{\"name\":\"T9\"}');"
+  printf '%s\n' "$user_blk" >"$BLK_FAKE/blocks"   # the user's own terminal
+  cat >"$BLK_FAKE/wsh" <<'FAKE'
+#!/usr/bin/env bash
+d=$(dirname "$0")
+case "$1" in
+  wavepath) echo "$d/wave" ;;
+  run) id=$(uuidgen | tr 'A-Z' 'a-z'); echo "$id" >>"$d/blocks"; echo "created block:$id" ;;
+  blocks) [ -e "$d/list-fail" ] && { echo "Error: list" >&2; exit 1; }
+          printf '['; sep=""; while read -r b; do printf '%s{"blockid": "%s"}' "$sep" "$b"; sep=","; done <"$d/blocks"; echo ']' ;;
+  deleteblock)
+    echo "$3" >>"$d/deleted"
+    case "$3" in block:*) ;; *) echo "Error: resolving blockid: no WAVETERM_BLOCKID env var set" >&2; exit 1 ;; esac
+    [ -e "$d/delete-fail" ] && { echo "Error: delete block failed" >&2; exit 1; }
+    grep -vx "${3#block:}" "$d/blocks" >"$d/b.tmp" || true; mv "$d/b.tmp" "$d/blocks"; echo "block deleted" ;;
+  *) exit 0 ;;
+esac
+FAKE
+  chmod +x "$BLK_FAKE/wsh"
+  touch "$BLK_FAKE/deleted"
+
+  blk_run() {  # wsh-live.sh in the fake Wave; stderr -> $BLK_FAKE/err
+    env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID PATH="$BLK_FAKE:$PATH" \
+      WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=faketab \
+      "$SCRIPT_DIR/wsh-live.sh" "$@" >/dev/null 2>"$BLK_FAKE/err"
+  }
+  listed() { grep -qx "$1" "$BLK_FAKE/blocks"; }
+  marker() {  # $1 session: the id `open` would have recorded, as a fake block
+    id=$(uuidgen | tr 'A-Z' 'a-z'); echo "$id" >>"$BLK_FAKE/blocks"
+    printf '%s\n' "$id" >"$BLK_FAKE/state/block-$1"
+  }
+  for s in 1 2 3 4; do tmux new-session -d -s "${BLK_PFX}-$s" 2>/dev/null; done
+
+  # 1. open records the block it created; stop closes it (block: oref) and
+  #    nothing else.
+  blk_run open "${BLK_PFX}-1" || true
+  id=$(tr -d '[:space:]' <"$BLK_FAKE/state/block-${BLK_PFX}-1" 2>/dev/null || true)
+  if [ -n "$id" ] && listed "$id"; then chk "1a open records its block id" 0
+  else chk "1a open records its block id" 1 "marker '$id'"; fi
+  blk_run stop "${BLK_PFX}-1" || true
+  if [ -n "$id" ] && ! listed "$id" && ! grep -q 'cockpit:' "$BLK_FAKE/err"; then chk "1b stop closes the recorded block" 0
+  else chk "1b stop closes the recorded block" 1 "$(cat "$BLK_FAKE/err")"; fi
+  rc=0; grep -qx "block:$id" "$BLK_FAKE/deleted" || rc=1; chk "1c deleteblock gets the block: oref" "$rc"
+
+  # 2. gc closes the recorded block of the session it kills.
+  marker "${BLK_PFX}-2"
+  blk_run gc --idle=0 --only-session="${BLK_PFX}-2" || true
+  if ! tmux has-session -t "=${BLK_PFX}-2" 2>/dev/null && ! listed "$id"; then chk "2 gc closes the recorded block" 0
+  else chk "2 gc closes the recorded block" 1 "$(cat "$BLK_FAKE/err")"; fi
+
+  # 3. block already closed by the user: no error, no warning.
+  marker "${BLK_PFX}-3"; grep -vx "$id" "$BLK_FAKE/blocks" >"$BLK_FAKE/b.tmp"; mv "$BLK_FAKE/b.tmp" "$BLK_FAKE/blocks"
+  rc=0; blk_run stop "${BLK_PFX}-3" || rc=$?
+  if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/err" ]; then chk "3 already-closed block is silent" 0
+  else chk "3 already-closed block is silent" 1 "rc=$rc $(cat "$BLK_FAKE/err")"; fi
+
+  # 4. deleteblock fails: stop still kills the session but warns on stderr.
+  marker "${BLK_PFX}-4"; touch "$BLK_FAKE/delete-fail"
+  blk_run stop "${BLK_PFX}-4" || true
+  err=$(cat "$BLK_FAKE/err")
+  if ! tmux has-session -t "=${BLK_PFX}-4" 2>/dev/null && listed "$id" \
+     && case "$err" in *"failed to close Wave block $id"*) true ;; *) false ;; esac; then
+    chk "4 failed deleteblock warns on stderr" 0
+  else chk "4 failed deleteblock warns on stderr" 1 "$err"; fi
+
+  # 5. the user's unrecorded block was never targeted.
+  if listed "$user_blk" && ! grep -q "$user_blk" "$BLK_FAKE/deleted"; then chk "5 unrecorded block untouched" 0
+  else chk "5 unrecorded block untouched" 1; fi
+
+  [ "$failures" -eq 0 ] || { echo "selftest-block: $failures failure(s)" >&2; return 1; }
+  echo "selftest-block: ok"
+}

@@ -146,8 +146,8 @@ EOF
     if [ "$dry_run" = "1" ]; then
       echo "gc: hygiene would-clean: $base (dead slug, age ${age}s)"
     else
-      block_id_close_path "$f"
-      echo "gc: hygiene cleaned: $base (dead slug, age ${age}s, block closed best-effort)"
+      block_id_close_path "$f" || true  # warns on stderr itself
+      echo "gc: hygiene cleaned: $base (dead slug, age ${age}s, block closed)"
     fi
   done
 
