@@ -2,7 +2,7 @@
 # collect.sh — extraction DÉTERMINISTE de l'état final des sessions Claude Code.
 #
 # Parcourt ~/.claude/projects/*/*.jsonl et sort UNE ligne par session, champs séparés par « | » :
-#   PROJET|ID8|DERNIERE_ACTIVITE|TAILLE|TYPE_DERNIERE_ENTREE|intr=N|TAG|SUJET|…FIN
+#   PROJET|UUID|DERNIERE_ACTIVITE|TAILLE|TYPE_DERNIERE_ENTREE|intr=N|TAG|SUJET|…FIN
 #   (les « | » présents dans SUJET/FIN sont remplacés par « ¦ » : les colonnes restent stables)
 #
 #   DERNIERE_ACTIVITE     : heure locale (fuseau système, format YYYY-MM-DDTHH:MM) — convertie
@@ -109,7 +109,8 @@ find "$PROJ_DIR" -maxdepth 2 -name "*.jsonl" -mtime -"$DAYS" | sort | while IFS=
   if [ -n "$PROJECT" ]; then
     case "$proj" in *"$PROJECT"*) ;; *) continue ;; esac
   fi
-  id=$(basename "$f" .jsonl | cut -c1-8)
+  uuid=$(basename "$f" .jsonl)   # UUID complet : seul identifiant accepté par `claude --resume`
+  id=${uuid:0:8}                 # ID8 : clé des dispositions et de --exclude
   if [ -n "$EXCLUDE" ] && [ "$id" = "$EXCLUDE" ]; then continue; fi
   # La DERNIÈRE ligne du tsv pour cet ID8 l'emporte (fichier append-only) : un REPRENDRE/ATTEND
   # postérieur à un CLOS ré-ouvre la session, et inversement un CLOS postérieur la referme.
@@ -220,7 +221,7 @@ find "$PROJ_DIR" -maxdepth 2 -name "*.jsonl" -mtime -"$DAYS" | sort | while IFS=
   fi
 
   line=$(printf '%s|%s|%s|%sKo|%s|intr=%s|%s|%s|…%s' \
-    "$proj" "$id" "$ts" "$size_kb" "$ltype" "$intr" "$tag" "$subject" "$fin")
+    "$proj" "$uuid" "$ts" "$size_kb" "$ltype" "$intr" "$tag" "$subject" "$fin")
 
   if [ "$RAW" = 1 ]; then
     printf '%s\n' "$line"

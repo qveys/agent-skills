@@ -320,12 +320,15 @@ jamais adoptées restent sous la clé `user-preopen-<n>`, les adoptées passent 
 
 `open`/`spawn` impriment `opened Wave block <block-id> ...` et mémorisent cet id
 sous `~/.cache/wsh-cockpit/block-<session>`. `teardown_session` — partagé par
-`stop` et `gc` — le relit et lance `wsh deleteblock -b <block-id>` en
-best-effort : le bloc se referme parfois tout seul quand le process du pane
-sort, auquel cas `deleteblock` retourne simplement `not found` ; l'absence de
-`wsh` sur le `PATH` est également tolérée. Le repli manuel (`tmux attach`
-imprimé) ne sert que si le fichier d'état manque — bloc ouvert à la main, ou
-état effacé sous ses pieds.
+`stop`, `gc` et l'hygiène des marqueurs — le relit : absent de
+`wsh blocks list` → déjà fermé, silencieux ; sinon
+`wsh deleteblock -b block:<block-id>` puis re-vérification, avertissement
+stderr si le bloc reste listé.
+
+Piège mesuré : passer l'id en oref `block:<uuid>`. Un uuid nu échoue hors d'un
+bloc Wave (`no WAVETERM_BLOCKID env var set`, le cas du shell de l'agent) — d'où
+l'ancien bloc « detached or ended » après `stop`. Idem dans `wsh-rexec.sh`.
+Test : `selftest-block`.
 
 ## Couverture selftest de `gc`
 

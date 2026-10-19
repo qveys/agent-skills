@@ -139,8 +139,15 @@ scripts/wsh-live.sh start cockpit --reuse   # only when continuing YOUR session
 
 La session survit aux appels et au détachement (Ctrl-b d) — c'est ce qui en fait
 un espace partagé. **`stop` (et `gc`) ferment le bloc Wave automatiquement** :
-l'id est mémorisé sous `~/.cache/wsh-cockpit/block-<session>` et `teardown_session`
-le supprime en best-effort. Rien à faire à la main.
+`open` (donc aussi `spawn`, qui passe par lui) mémorise l'id du bloc qu'il vient
+de créer sous `~/.cache/wsh-cockpit/block-<session>` ; `teardown_session` supprime
+ce bloc-là et lui seul (`wsh deleteblock -b block:<id>`), puis vérifie via
+`wsh blocks list` qu'il a disparu. Déjà fermé : silencieux. Échec : avertissement
+`wsh-cockpit: … Wave block <id> …` sur stderr, session tuée quand même. Un bloc
+non enregistré (terminaux de l'utilisateur) n'est jamais touché.
+
+Bloc affichant `[cockpit] <session>: detached or ended` = session tmux morte,
+bloc non enregistré ou suppression en échec (voir l'avertissement). Ctrl-D le ferme.
 
 ## Cleaning up — but not too fast
 
@@ -150,7 +157,7 @@ supprimer tôt ferme un terminal en cours d'usage.
 
 ```bash
 wsh blocks list                 # find strays (note which look idle ≥60s)
-wsh deleteblock -b <block-id>   # remove each confirmed orphan
+wsh deleteblock -b block:<block-id>   # remove each confirmed orphan
 ```
 
 Ne supprime que les blocs/sessions **que tu as créés ou adoptés sans `--keep`**.
