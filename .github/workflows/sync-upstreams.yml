@@ -30,6 +30,8 @@ jobs:
         run: npm ci
 
       - name: Run Skills Sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run skills:sync -- --all
 
       - name: Check for changes
