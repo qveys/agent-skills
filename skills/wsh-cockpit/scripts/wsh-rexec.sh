@@ -70,7 +70,7 @@ if [[ "$RAW" =~ block:([0-9a-f-]+) ]]; then ID="${BASH_REMATCH[1]}"; else ID="";
 # (the caller blocks until the child's stdout/stderr pipes close — so we must
 # detach them). setsid would be cleaner but macOS lacks it.
 schedule_cleanup() {
-  { sleep "$LINGER"; wsh deleteblock -b "$ID" >/dev/null 2>&1 || true; } \
+  { sleep "$LINGER"; wsh deleteblock -b "block:$ID" >/dev/null 2>&1 || true; } \
     </dev/null >/dev/null 2>&1 &
   disown 2>/dev/null || true
 }
@@ -82,7 +82,7 @@ if [ "$TARGET" != "local" ]; then
   # would run twice. runonce makes it fire exactly once, then disarms itself.
   # Explicit failure handling: under `set -e` a bare failing setmeta would abort
   # mid-statement (trap still cleans the block, but silently). Report it instead.
-  if ! wsh setmeta -b "$ID" \
+  if ! wsh setmeta -b "block:$ID" \
     "connection=$TARGET" \
     'cmd:clearonstart=false' \
     'cmd:runonstart=true' \
@@ -99,7 +99,7 @@ fi
 SB=""; __i=0
 while [ "$__i" -lt "$TIMEOUT" ]; do
   __i=$((__i + 1))
-  SB=$(wsh termscrollback -b "$ID" 2>&1 || true)
+  SB=$(wsh termscrollback -b "block:$ID" 2>&1 || true)
   case "$SB" in *"$MARK"*) break ;; esac
   sleep 1
 done

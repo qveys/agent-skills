@@ -239,6 +239,11 @@
 #                              re-attaches on Enter — instead of dying with the
 #                              attach and leaving a black, key-swallowing dead
 #                              terminal; tmux-only; rc 0/1
+#   selftest-block             open records its Wave block id; stop/gc close exactly
+#                              that block (verified gone from `wsh blocks list`),
+#                              already-closed is silent, a failed deleteblock warns
+#                              on stderr, unrecorded blocks are never touched; fake
+#                              wsh + throwaway state — no real Wave block; tmux-only
 #
 # Env: WSH_MUX=tmux (default)    mux backend; WSH_MUX=zellij is EXPERIMENTAL —
 #                                core loop only (start/send/read/wait-done/stop/
@@ -1339,6 +1344,9 @@ selftest-attach)
 selftest-situate)
   cmd_selftest_situate
   ;;
+selftest-block)
+  cmd_selftest_block
+  ;;
 push)
   have_mux
   # [session] is genuinely optional: with only <local> <remote-path> the
@@ -1634,5 +1642,5 @@ release)
   fi
   ;;
 *)
-  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach|selftest-situate} [args]" >&2; exit 2 ;;
+  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach|selftest-situate|selftest-block} [args]" >&2; exit 2 ;;
 esac

@@ -972,7 +972,7 @@ oneshot_ssh_track() {
 
 # Kill a session and clean up everything that belongs to it: the seq-counter
 # file, the sep/step "helpers loaded" tmux options, its ttyd web view (if
-# any), the Wave block `open` last attached (best-effort deleteblock), and —
+# any), the Wave block `open` recorded (deleteblock, verified, warns on failure), and —
 # only if it was the one remembered for the CURRENT agent/prefix — the
 # last-session pointer. Shared by `stop` (explicit, one session) and `gc`
 # (idle sweep, many sessions) so this cleanup logic lives in exactly one
@@ -1023,7 +1023,7 @@ teardown_session() {
   rm -f "$cpath" 2>/dev/null || true
   web_teardown "$sess"
   if mux_kill "$sess"; then killed=0; fi
-  block_id_close "$sess"
+  block_id_close "$sess" || true  # warns on stderr itself
   sf=$(state_file)
   if [ -f "$sf" ] && [ "$(tr -d '[:space:]' <"$sf")" = "$sess" ]; then
     rm -f "$sf" 2>/dev/null || true
