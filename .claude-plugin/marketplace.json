@@ -50,6 +50,24 @@
       "strict": false
     },
     {
+      "name": "tailscale-vps",
+      "source": "./skills/tailscale-vps",
+      "description": "Accès aux VPS via tailscale ssh (jamais ssh direct), méthode cockpit wsh",
+      "strict": false
+    },
+    {
+      "name": "preflight-autonome",
+      "source": "./skills/preflight-autonome",
+      "description": "Preflight d'accès avant autonomie (sondes lecture seule, tableau PRÊT/CONTOURNABLE/HUMAIN)",
+      "strict": false
+    },
+    {
+      "name": "orchestration-regles-locales",
+      "source": "./skills/orchestration-regles-locales",
+      "description": "Règles locales d'orchestration Orca (choix des agents, exclusions, nettoyage, retry, harnais GitHub)",
+      "strict": false
+    },
+    {
       "name": "agent-governance",
       "source": "./skills/agent-governance",
       "description": "Governance, safety and trust controls for AI agent systems",

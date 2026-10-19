@@ -141,4 +141,4 @@ résous-le **par le service** et exige **un seul** conteneur — jamais
 ## Nettoyage
 
 **Attends au moins 60s** avant de traiter une session idle comme orpheline — elle
-peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux.
+peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux (avertissement stderr si échec).
