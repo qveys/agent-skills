@@ -132,7 +132,7 @@ EOF
     done
   done
 
-  # block-<slug>: best-effort `wsh deleteblock` before dropping the marker
+  # block-<slug>: verified `wsh deleteblock` (warns on failure) before dropping the marker
   # (spec v12 §3 — "pas de rm sec").
   for f in "$STATE_DIR"/block-*; do
     [ -e "$f" ] || continue
