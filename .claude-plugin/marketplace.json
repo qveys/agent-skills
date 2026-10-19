@@ -44,6 +44,12 @@
       "strict": false
     },
     {
+      "name": "tailscale-vps",
+      "source": "./skills/tailscale-vps",
+      "description": "Accès aux VPS via tailscale ssh (jamais ssh direct), méthode cockpit wsh",
+      "strict": false
+    },
+    {
       "name": "preflight-autonome",
       "source": "./skills/preflight-autonome",
       "description": "Preflight d'accès avant autonomie (sondes lecture seule, tableau PRÊT/CONTOURNABLE/HUMAIN)",
