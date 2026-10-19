@@ -44,6 +44,12 @@
       "strict": false
     },
     {
+      "name": "preflight-autonome",
+      "source": "./skills/preflight-autonome",
+      "description": "Preflight d'accès avant autonomie (sondes lecture seule, tableau PRÊT/CONTOURNABLE/HUMAIN)",
+      "strict": false
+    },
+    {
       "name": "agent-governance",
       "source": "./skills/agent-governance",
       "description": "Governance, safety and trust controls for AI agent systems",
