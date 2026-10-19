@@ -56,6 +56,12 @@
       "strict": false
     },
     {
+      "name": "orchestration-regles-locales",
+      "source": "./skills/orchestration-regles-locales",
+      "description": "Règles locales d'orchestration Orca (choix des agents, exclusions, nettoyage, retry, harnais GitHub)",
+      "strict": false
+    },
+    {
       "name": "agent-governance",
       "source": "./skills/agent-governance",
       "description": "Governance, safety and trust controls for AI agent systems",
