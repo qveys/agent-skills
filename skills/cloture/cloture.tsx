@@ -1,4 +1,7 @@
+import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
+
+const line = atom({ plugin: 'cloture', key: 'text' } as const, null)
 
 const WRITE = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
 const MUTATING = /\b(git\s+(commit|push|add|merge|rebase|reset|checkout|mv|rm|apply|tag)|rm|mv|cp|mkdir|rmdir|touch|tee|ln|chmod|chown|npm\s+(i|install|uninstall)|pnpm\s+(add|install)|pip3?\s+install|brew\s+(install|upgrade|uninstall)|sed\s+-i|gh\s+(pr|api\s+-X)|docker\s+(rm|run|build|compose))\b|(^|[^>&])>>?\s*[^&\s]/
@@ -49,10 +52,10 @@ export const register: Register = on => {
   let isFirst = true
   let stop = new AbortController()
 
-  on('turn.start', ($, e, next) => {
+  on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       stop.abort()
-      $.ui.status(undefined)
+      await update($, line, () => null)
     }
     return next(e)
   })
@@ -70,10 +73,27 @@ export const register: Register = on => {
         { signal: stop.signal },
       )
       const text = r.isAnswered ? r.text.trim() : ''
-      if (text && !/^SILENCE\b/.test(text) && !stop.signal.aborted) $.ui.status(text.slice(0, 400))
+      if (text && !/^SILENCE\b/.test(text) && !stop.signal.aborted) await update($, line, () => text.slice(0, 400))
     } catch {
       // échec : rien à afficher
     }
     return next(e)
+  })
+
+  // Rendu du « Session recap » natif : ※ (U+203B) dim dans une colonne de 2, texte dim italique.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const text = await read($, line)
+    if (!text) return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    return (
+      <Box>
+        <Box minWidth={2}>
+          <Text dimColor>{'\u203B'}</Text>
+        </Box>
+        <Text dimColor italic>
+          {text}
+        </Text>
+      </Box>
+    )
   })
 }
