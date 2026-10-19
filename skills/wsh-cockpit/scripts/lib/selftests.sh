@@ -4092,7 +4092,7 @@ cmd_selftest_block() {
   BLK_FAKE=$(mktemp -d "${TMPDIR:-/tmp}/wsh-selftest-block.XXXXXX")
   BLK_PFX="cockpit-zz-selftest-block-$$"
   local failures=0 user_blk="11111111-1111-1111-1111-111111111111" s id err rc
-  trap 'for s in 1 2 3 4; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
+  trap 'for s in 1 2 3 4 5 6 7; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
 
   chk() { if [ "$2" -eq 0 ]; then echo "ok $1"; else echo "FAIL $1${3:+: $3}" >&2; failures=$((failures + 1)); fi; }
 
@@ -4130,7 +4130,7 @@ FAKE
     id=$(uuidgen | tr 'A-Z' 'a-z'); echo "$id" >>"$BLK_FAKE/blocks"
     printf '%s\n' "$id" >"$BLK_FAKE/state/block-$1"
   }
-  for s in 1 2 3 4; do tmux new-session -d -s "${BLK_PFX}-$s" 2>/dev/null; done
+  for s in 1 2 3 4 5 6 7; do tmux new-session -d -s "${BLK_PFX}-$s" 2>/dev/null; done
 
   # 1. open records the block it created; stop closes it (block: oref) and
   #    nothing else.
@@ -4167,6 +4167,39 @@ FAKE
   # 5. the user's unrecorded block was never targeted.
   if listed "$user_blk" && ! grep -q "$user_blk" "$BLK_FAKE/deleted"; then chk "5 unrecorded block untouched" 0
   else chk "5 unrecorded block untouched" 1; fi
+
+  # 6. `wsh blocks list` fails: warns, no crash, session still killed, rc as in 3.
+  rm -f "$BLK_FAKE/delete-fail"; marker "${BLK_PFX}-5"; touch "$BLK_FAKE/list-fail"
+  rc=0; blk_run stop "${BLK_PFX}-5" || rc=$?
+  err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/list-fail"
+  if [ "$rc" -eq 0 ] && ! tmux has-session -t "=${BLK_PFX}-5" 2>/dev/null \
+     && case "$err" in *"blocks list"*"failed"*) true ;; *) false ;; esac; then
+    chk "6 failed blocks list warns, session killed, rc unchanged" 0
+  else chk "6 failed blocks list warns, session killed, rc unchanged" 1 "rc=$rc $err"; fi
+
+  # 7. wsh absent from PATH: clean warning, no crash, session killed.
+  marker "${BLK_PFX}-6"; id7=$id
+  if PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" command -v wsh >/dev/null 2>&1; then
+    echo "skip 7 wsh absent (a real wsh sits on the base PATH)"
+  else
+    rc=0
+    env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+      WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=faketab \
+      "$SCRIPT_DIR/wsh-live.sh" stop "${BLK_PFX}-6" >/dev/null 2>"$BLK_FAKE/err" || rc=$?
+    err=$(cat "$BLK_FAKE/err")
+    if [ "$rc" -eq 0 ] && ! tmux has-session -t "=${BLK_PFX}-6" 2>/dev/null \
+       && case "$err" in *"wsh not found"*"$id7"*) true ;; *) false ;; esac; then
+      chk "7 absent wsh warns cleanly" 0
+    else chk "7 absent wsh warns cleanly" 1 "rc=$rc $err"; fi
+  fi
+
+  # 8. malformed marker (non-hex): ignored, deleteblock never called.
+  : >"$BLK_FAKE/deleted"
+  printf 'not-a-block-id!\n' >"$BLK_FAKE/state/block-${BLK_PFX}-7"
+  echo 'not-a-block-id!' >>"$BLK_FAKE/blocks"   # listed: an unguarded close would call deleteblock
+  rc=0; blk_run stop "${BLK_PFX}-7" || rc=$?
+  if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/deleted" ] && [ ! -s "$BLK_FAKE/err" ]; then chk "8 malformed marker ignored" 0
+  else chk "8 malformed marker ignored" 1 "rc=$rc deleted=$(cat "$BLK_FAKE/deleted") $(cat "$BLK_FAKE/err")"; fi
 
   [ "$failures" -eq 0 ] || { echo "selftest-block: $failures failure(s)" >&2; return 1; }
   echo "selftest-block: ok"

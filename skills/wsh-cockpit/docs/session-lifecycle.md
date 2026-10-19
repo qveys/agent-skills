@@ -157,7 +157,7 @@ supprimer tôt ferme un terminal en cours d'usage.
 
 ```bash
 wsh blocks list                 # find strays (note which look idle ≥60s)
-wsh deleteblock -b <block-id>   # remove each confirmed orphan
+wsh deleteblock -b block:<block-id>   # remove each confirmed orphan
 ```
 
 Ne supprime que les blocs/sessions **que tu as créés ou adoptés sans `--keep`**.

@@ -258,14 +258,14 @@ block_id_close_path() {  # $1 marker path (block-<slug>)
     echo "wsh-cockpit: wsh not found — Wave block $id left open, close it by hand" >&2
     return 1
   fi
-  for i in 0 1 2 3 4 5; do
+  for i in 0 1 2 3 4 5 6; do
     if ! list=$(wsh blocks list --json 2>/dev/null); then
       echo "wsh-cockpit: \`wsh blocks list\` failed — can't confirm Wave block $id is closed" >&2
       return 1
     fi
     case "$list" in *"\"$id\""*) ;; *) return 0 ;; esac
     if [ "$i" -eq 0 ]; then wsh deleteblock -b "block:$id" >/dev/null 2>&1 || true
-    else sleep 0.2; fi
+    else sleep 0.5; fi
   done
   echo "wsh-cockpit: failed to close Wave block $id (still in \`wsh blocks list\`) — run: wsh deleteblock -b block:$id" >&2
   return 1
