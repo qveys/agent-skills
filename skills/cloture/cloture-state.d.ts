@@ -1,5 +1,5 @@
-declare module 'claude-code' {
+declare module "claude-code" {
   interface PluginState {
-    cloture: { text: string | null }
+    cloture: { text: string | null };
   }
 }
