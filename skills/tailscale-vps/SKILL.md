@@ -7,14 +7,16 @@ description: Accéder aux VPS (vps-openclaw, vps-dokploy) depuis un agent — to
 
 ## Règle
 
-`tailscale ssh <hôte>`, **jamais** `ssh <hôte>` : le ssh direct n'est pas la voie prévue. Une passphrase FIDO2 demandée en ssh direct : non vérifié.
+`tailscale ssh <hôte>`, **jamais** `ssh <hôte>` : depuis le shell d'un agent, le ssh direct échoue (`Permission denied (publickey)`, vérifié le 2026-10-19) car la clé SK (`id_ed25519_sk_mac`, FIDO2) est servie par l'agent 1Password, absent du shell. Un agent ne peut pas saisir la passphrase.
 
 ## Hôtes
 
-Listes de conteneurs : voir `docker ps` sur l'hôte (non vérifié ici, elles changent).
+Contenu vérifié le 2026-10-19 par `docker ps` ; les conteneurs changent, revérifier avant de s'y fier.
 
-- **`vps-openclaw`** : conteneurs : voir `docker ps`.
-- **`vps-dokploy`** : conteneurs : voir `docker ps`.
+- **`vps-openclaw`** (srv1453980, tailnet `100.100.10.60`) : `paperclip`, `squid-proxy-squid-1`, `traefik-traefik-1`, `traefik-cloudflared-1`, `gitea-runner-vps-openclaw`. **Pas** de hermes ni opencode. Détails Paperclip : skill `paperclip-vps`.
+- **`vps-dokploy`** (srv766743) : `hermes-agent`, `hermes-webui`, `hermes-voice-bridge`, `myopencode-server-6vnn4o-opencode-1`, plus Dokploy, omniroute, rustdesk, myhousekeeper, etc.
+  - Dépôt brain : `/opt/workspace/brain` sur l'hôte = `/workspace/brain` dans les conteneurs (remote Gitea).
+  - `sudo` refusé. Une crontab hôte existe (sync-client dans `hermes-agent`) : ne pas la supposer vide.
 
 ## Méthode cockpit (skill `wsh-cockpit`)
 
@@ -38,3 +40,5 @@ Pièges :
 ## Conteneurs
 
 Pour descendre dans un conteneur (`docker exec` / `docker compose exec`) depuis le pane, suivre la section « Descendre d'une couche — conteneur » du skill `wsh-cockpit` (`remote-init --container`, résolution du nom du conteneur).
+
+`hermes-agent` : `docker exec` y entre en root (uid 0, vérifié le 2026-10-19).
