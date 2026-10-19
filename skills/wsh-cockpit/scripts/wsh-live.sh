@@ -1083,13 +1083,13 @@ open)
     echo "wsh not found — can't auto-open a Wave block. Attach by hand:" >&2
     echo "  ${ATTACH}" >&2; exit 5; }
 
-  TAB=""
+  TAB=""; TAB_SRC=""
   if [ -n "$TAB_NAME" ]; then
     TAB_RC=0
     resolve_tab_by_name "$TAB_NAME" || TAB_RC=$?
     case "$TAB_RC" in
       0)
-        TAB="$TAB_BY_NAME_RESULT"
+        TAB="$TAB_BY_NAME_RESULT"; TAB_SRC="--tab"
         if [ "$(tab_count_candidates "$TAB_BY_NAME_ALL")" -gt 1 ]; then
           echo "⚠️  multiple tabs named '$TAB_NAME' in this workspace — using the first (pinned, then tab order): $(printf '%s' "$TAB_BY_NAME_ALL" | tr '\n' ' ')" >&2
         fi
@@ -1167,6 +1167,9 @@ MSG
     DESC=$(tab_describe "$TAB" 2>/dev/null || true)
     TNAME="${DESC%%|*}"; TCOUNT="${DESC##*|}"
     echo "opened Wave block ${NEWID} attached to '${SESS}' (on tab ${TNAME:-$TAB})"
+    VIA=$TAB_SRC
+    [ -n "$VIA" ] || VIA=$(head -1 "$(tab_via_file "$SESS")" 2>/dev/null || true)
+    echo "onglet utilisé : «${TNAME:-$TAB}» (déduit via ${VIA:-cache})"
     if [ -n "$TNAME" ] && [ "${TCOUNT:-1}" -gt 1 ] 2>/dev/null; then
       echo "👉 the cockpit is on tab «${TNAME}» — click that tab in Wave to see it (you may be on another tab)."
     fi
