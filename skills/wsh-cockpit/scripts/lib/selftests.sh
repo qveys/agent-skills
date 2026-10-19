@@ -531,9 +531,14 @@ cmd_selftest_gc() {
   SESS2="cockpit-${HYGPFX}-hyg2"
   SESS3="cockpit-${HYGPFX}-hyg3"
   live_selftest_gc_cleanup() {
-    "$0" stop "$SESS" >/dev/null 2>&1 || true
-    "$0" stop "$SESS2" >/dev/null 2>&1 || true
-    "$0" stop "$SESS3" >/dev/null 2>&1 || true
+    # teardown_session directly, NOT "$0" stop: $0 is relative when the script
+    # is run as `bash wsh-live.sh …` and `stop` refuses some sessions (guards),
+    # which left real cockpit-selftest* tmux sessions behind.
+    local s
+    for s in "$SESS" "$SESS2" "$SESS3"; do
+      teardown_session "$s" >/dev/null 2>&1 || true
+      mux_kill "$s" >/dev/null 2>&1 || true
+    done
     rm -f "$STATE_DIR"/*"$HYGPFX"* 2>/dev/null || true
   }
   trap live_selftest_gc_cleanup EXIT
@@ -745,6 +750,12 @@ cmd_selftest_gc() {
   if mux_has "$SESS3"; then report_gc_case "20 keep session survives a real gc --idle=0 sweep" 0
   else report_gc_case "20 keep session survives a real gc --idle=0 sweep" 1 "keep session was killed despite the sticky marker"; fi
 
+  # 21. no real session survives the run (same cleanup as the EXIT trap).
+  live_selftest_gc_cleanup
+  if mux_has "$SESS" || mux_has "$SESS2" || mux_has "$SESS3"; then
+    report_gc_case "21 no selftest session left behind" 1 "cockpit-selftest* session still alive"
+  else report_gc_case "21 no selftest session left behind" 0; fi
+
   if [ "$failures" -ne 0 ]; then
     echo "selftest-gc: $failures failure(s)" >&2
     exit 1
@@ -752,12 +763,42 @@ cmd_selftest_gc() {
   echo "selftest-gc: ok"
 }
 
+# Faux Wave pour les selftests (aucun bloc réel, aucun vrai tmux) : DB sqlite
+# avec deux onglets (T1 = périmé, T2 = onglet de l'agent) + stubs wsh/ps/tmux
+# dans $1/stubbin. Variables STUB_SESS (session tmux de l'agent), STUB_BID /
+# STUB_TID (WAVETERM_BLOCKID / WAVETERM_TABID de CETTE session), STUB_DISP.
+# Pose SELFTEST_{T1,T2,B1,B2} (globales : lues par l'appelant).
+selftest_wave_stubs() {
+  local sb="$1/stubbin" rdb="$1/wave/db"
+  SELFTEST_B1="11111111-aaaa-4aaa-8aaa-111111111111"; SELFTEST_B2="22222222-bbbb-4bbb-8bbb-222222222222"
+  SELFTEST_T1="aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"; SELFTEST_T2="bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
+  mkdir -p "$sb" "$rdb"
+  rm -f "$rdb/waveterm.db"
+  sqlite3 "$rdb/waveterm.db" \
+    "CREATE TABLE db_workspace (oid TEXT PRIMARY KEY, data TEXT); CREATE TABLE db_tab (oid TEXT PRIMARY KEY, data TEXT);
+     INSERT INTO db_tab VALUES ('$SELFTEST_T1','{\"name\":\"T1\",\"blockids\":[\"$SELFTEST_B1\"]}'), ('$SELFTEST_T2','{\"name\":\"T2\",\"blockids\":[\"$SELFTEST_B2\"]}');"
+  printf '#!/bin/sh\necho "%s"\n' "$1/wave" >"$sb/wsh"
+  # ps : l'agent ($STUB_ME) a pour parent le pid du pane (55555).
+  printf '#!/bin/sh\n[ "$4" = "$STUB_ME" ] && echo 55555 || echo 1\n' >"$sb/ps"
+  cat >"$sb/tmux" <<'STUB'
+#!/bin/sh
+case "$1" in
+  list-panes) [ -n "$STUB_SESS" ] && echo "55555 $STUB_SESS" ;;
+  display-message) echo "$STUB_DISP" ;;
+  show-environment)  # tmux réel : rc=1 si la variable est absente de la session
+    case "$4" in WAVETERM_BLOCKID) v=$STUB_BID ;; WAVETERM_TABID) v=$STUB_TID ;; *) v= ;; esac
+    if [ -n "$v" ]; then echo "$4=$v"; else echo "unknown variable: $4" >&2; exit 1; fi ;;
+esac
+STUB
+  chmod +x "$sb/wsh" "$sb/ps" "$sb/tmux"
+}
+
 # Cache smoke test: exercises resolve_live_tab_cached (lib/wave.sh) against
 # whatever live tab this machine can actually resolve right now — skipped
 # entirely if none can be, same spirit as selftest-gc's tmux-only skip. Never
 # calls spawn/open; uses a throwaway session name purely as a cache key, so
 # teardown_session at the end only needs to clean up the cache file it wrote.
-cmd_selftest_cache() {
+cmd_selftest_cache_run() {
   local failures=0 SESS CF TAB1 TAB2 TAB3 TAB4
 
   report_cache_case() {  # $1 label  $2 rc (0=ok)  $3 detail (shown on failure)
@@ -769,10 +810,7 @@ cmd_selftest_cache() {
     fi
   }
 
-  if ! command -v sqlite3 >/dev/null 2>&1 || ! TAB1=$(resolve_live_tab 2>/dev/null); then
-    echo "selftest-cache: skip (no live Wave tab resolvable — nothing to validate)"
-    return 0
-  fi
+  TAB1=$(resolve_live_tab 2>/dev/null) || { echo "FAIL selftest-cache: stub tab unresolvable" >&2; exit 1; }
 
   SESS="cockpit-selftest-cache-$$"
   CF=$(tab_cache_file "$SESS")
@@ -838,6 +876,20 @@ cmd_selftest_cache() {
     exit 1
   fi
   echo "selftest-cache: ok"
+}
+
+# Tourne sur un faux Wave (selftest_wave_stubs) : mêmes cas partout, jamais de
+# skip silencieux. Sans sqlite3 : SKIPPED explicite (pas "ok").
+cmd_selftest_cache() {
+  local td rc=0
+  command -v sqlite3 >/dev/null 2>&1 || { echo "selftest-cache: SKIPPED (no sqlite3 — NOT validated)"; return 0; }
+  td=$(mktemp -d "${TMPDIR:-/tmp}/wsh-cache-test.XXXXXX")
+  selftest_wave_stubs "$td"
+  ( unset TMUX WAVETERM_BLOCKID WAVETERM_TABID
+    export STUB_ME=$$ STUB_SESS=T2-qveys STUB_BID="$SELFTEST_B2" PATH="$td/stubbin:$PATH"
+    cmd_selftest_cache_run ) || rc=$?
+  rm -rf "$td" 2>/dev/null || true
+  return "$rc"
 }
 
 # One-shot-SSH nudge test: pure-function pattern matching (lib/session.sh's
@@ -3482,6 +3534,124 @@ cmd_selftest_tab() {
     report_tab_case "8 wsh introuvable -> rc=1" 1 "rc=$rc"
   fi
 
+  # 9-11 : resolve_live_tab avec tmux/ps/wsh FACTICES (aucun bloc Wave, aucun
+  # vrai tmux). Fixture : T1 (bloc périmé de l'env) et T2 (bloc de la session
+  # tmux de l'agent, remonté par l'ascendance de processus).
+  local sb="$tmpdir/stubbin" rdb="$tmpdir/wave/db" b1 b2 t1 t2 out err rc via
+  selftest_wave_stubs "$tmpdir"
+  b1=$SELFTEST_B1; b2=$SELFTEST_B2; t1=$SELFTEST_T1; t2=$SELFTEST_T2
+  resolve_stubbed() {  # env: STUB_SESS STUB_BID WSH_TAB_STRICT ; stdout=tab stderr->$err
+    ( unset TMUX WAVETERM_BLOCKID; export WAVETERM_TABID=$t1 STUB_ME=$$
+      [ -z "${ENV_BID:-}" ] || export WAVETERM_BLOCKID="$ENV_BID"
+      [ -z "${STUB_DISP:-}" ] || export TMUX=stub TMUX_PANE=%0
+      PATH="$sb:$PATH" TAB_VIA_OUT="$tmpdir/via" resolve_live_tab 2>"$err" )
+  }
+  resolve_cached_stubbed() {  # $1 session ; mêmes variables que resolve_stubbed
+    ( unset TMUX WAVETERM_BLOCKID; export WAVETERM_TABID=$t1 STUB_ME=$$
+      PATH="$sb:$PATH" resolve_live_tab_cached "$1" 2>"$err" )
+  }
+  err="$tmpdir/err"
+
+  # 9. session tmux de l'agent -> onglet frais T2, malgré WAVETERM_TABID=T1 périmé.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="$b2" resolve_stubbed); via=$(cat "$tmpdir/via" 2>/dev/null)
+  if [ "$out" = $t2 ] && [ "$via" = agent-tmux ] && ! grep -q WAVETERM_TABID "$err"; then
+    report_tab_case "9 session tmux de l'agent -> onglet frais (pas le TABID périmé)" 0
+  else
+    report_tab_case "9 session tmux de l'agent" 1 "tab='$out' via='$via' err='$(cat "$err")'"
+  fi
+
+  # 10. WAVETERM_TABID seul : avertissement stderr, comportement inchangé ; STRICT=1 -> rc 1.
+  out=$(STUB_SESS="" STUB_BID="" resolve_stubbed); via=$(cat "$tmpdir/via" 2>/dev/null)
+  if [ "$out" = $t1 ] && [ "$via" = TABID ] && grep -q "WAVETERM_TABID seul" "$err"; then
+    report_tab_case "10a TABID seul -> avertissement + tab inchangé" 0
+  else
+    report_tab_case "10a TABID seul" 1 "tab='$out' via='$via' err='$(cat "$err")'"
+  fi
+  rc=0; out=$(STUB_SESS="" STUB_BID="" WSH_TAB_STRICT=1 resolve_stubbed) || rc=$?
+  if [ "$rc" -ne 0 ] && [ -z "$out" ]; then
+    report_tab_case "10b WSH_TAB_STRICT=1 refuse le TABID seul" 0
+  else
+    report_tab_case "10b WSH_TAB_STRICT=1" 1 "rc=$rc tab='$out'"
+  fi
+
+  # 11. blockid non-UUID (injection) renvoyé par tmux : jamais utilisé en SQL, repli TABID.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="zz' OR oid='$t2' OR '1'='" resolve_stubbed)
+  if [ "$out" = $t1 ] && sqlite3 "$rdb/waveterm.db" "SELECT count(*) FROM db_tab;" | grep -qx 2; then
+    report_tab_case "11 blockid non-UUID ignoré" 0
+  else
+    report_tab_case "11 blockid non-UUID ignoré" 1 "tab='$out'"
+  fi
+
+  # 11b. pane trouvé mais session sans WAVETERM_BLOCKID (tmux sort en rc=1) -> repli TABID.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="" resolve_stubbed)
+  if [ "$out" = $t1 ]; then report_tab_case "11b session sans BLOCKID -> repli TABID" 0
+  else report_tab_case "11b session sans BLOCKID" 1 "tab='$out'"; fi
+
+  # 12. env du shell (bloc T1 périmé) et session tmux (T2) divergent : tmux gagne.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="$b2" ENV_BID="$b1" resolve_stubbed)
+  if [ "$out" = $t2 ]; then report_tab_case "12 env BLOCKID et session tmux divergent -> tmux gagne" 0
+  else report_tab_case "12 divergence env/tmux" 1 "tab='$out'"; fi
+
+  # 13. 0a : nom de session malveillant -> jamais interpolé en SQL (retombe sur TABID).
+  out=$(STUB_SESS="" STUB_BID="" STUB_DISP="wave-aaaaaaaa' OR oid LIKE '$t2" resolve_stubbed)
+  if [ "$out" = $t1 ]; then report_tab_case "13 session wave-* malveillante ignorée (0a)" 0
+  else report_tab_case "13 session malveillante" 1 "tab='$out'"; fi
+
+  # 14. cache : (a) cache hérité sans fichier via -> ré-résolu (agent-tmux) ;
+  # (b) résolution TABID seul -> rien n'est mis en cache.
+  local stdir="$tmpdir/state" cf
+  mkdir -p "$stdir"
+  cf=$(STATE_DIR="$stdir" tab_cache_file s14)
+  printf "%s\n" "$t1" >"$cf"
+  out=$(STATE_DIR="$stdir" STUB_SESS="T2-qveys" STUB_BID="$b2" resolve_cached_stubbed s14)
+  if [ "$out" = $t2 ] && [ "$(tr -d '[:space:]' <"$cf")" = $t2 ]; then
+    report_tab_case "14a cache sans via ré-résolu" 0
+  else report_tab_case "14a cache sans via" 1 "tab='$out' cache='$(cat "$cf" 2>/dev/null)'"; fi
+  rm -f "$cf"
+  out=$(STATE_DIR="$stdir" STUB_SESS="" STUB_BID="" resolve_cached_stubbed s14)
+  if [ "$out" = $t1 ] && [ ! -f "$cf" ]; then report_tab_case "14b TABID seul non mis en cache" 0
+  else report_tab_case "14b TABID seul" 1 "tab='$out' cache=$([ -f "$cf" ] && echo présent || echo absent)"; fi
+
+  # 15. session tmux SANS BLOCKID mais avec WAVETERM_TABID frais -> onglet T2.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="" STUB_TID="$t2" resolve_stubbed); via=$(cat "$tmpdir/via" 2>/dev/null)
+  if [ "$out" = "$t2" ] && [ "$via" = agent-tmux-tabid ] && ! grep -q "TABID seul" "$err"; then
+    report_tab_case "15 TABID de la session tmux (sans BLOCKID) -> T2" 0
+  else report_tab_case "15 TABID session tmux" 1 "tab='$out' via='$via' err='$(cat "$err")'"; fi
+
+  # 16. TABID de la session tmux absent de la DB (ou non-UUID) -> ignoré, repli TABID shell.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="" STUB_TID="cccccccc-3333-4333-8333-cccccccccccc" resolve_stubbed)
+  [ "$out" = "$t1" ] && out=$(STUB_SESS="T2-qveys" STUB_BID="" STUB_TID="x' OR '1'='1" resolve_stubbed)
+  if [ "$out" = "$t1" ]; then report_tab_case "16 TABID tmux inexistant / non-UUID ignoré" 0
+  else report_tab_case "16 TABID tmux invalide" 1 "tab='$out'"; fi
+
+  # 16b. BLOCKID env valide (-> T2 via 0b) + TABID tmux inexistant en base : le TABID
+  # tmux est ignoré (check d'existence), 0b l'emporte sur le TABID périmé du shell.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="" STUB_TID="cccccccc-3333-4333-8333-cccccccccccc" ENV_BID="$b2" resolve_stubbed); via=$(cat "$tmpdir/via" 2>/dev/null)
+  if [ "$out" = "$t2" ] && [ "$via" = 0b ]; then report_tab_case "16b TABID tmux inexistant -> 0b gagne" 0
+  else report_tab_case "16b TABID tmux inexistant + BLOCKID env" 1 "tab='$out' via='$via'"; fi
+
+  # 16c/d. fragments courts (non-UUID) : jamais un LIKE '%a%' qui matcherait le 1er onglet.
+  out=$(STUB_SESS="T2-qveys" STUB_BID="a" STUB_TID="a" resolve_stubbed)
+  if [ "$out" = "$t1" ]; then report_tab_case "16c fragment court 'a' rejeté (BLOCKID/TABID tmux)" 0
+  else report_tab_case "16c fragment court" 1 "tab='$out'"; fi
+  out=$(STUB_SESS="" STUB_BID="" ENV_BID="1111" resolve_stubbed); via=$(cat "$tmpdir/via" 2>/dev/null)
+  if [ "$out" = "$t1" ] && [ "$via" = TABID ]; then report_tab_case "16d BLOCKID env court rejeté" 0
+  else report_tab_case "16d BLOCKID env court" 1 "tab='$out' via='$via'"; fi
+
+  # 17. cache posé via 0b / activetab (non fiable) -> ré-résolu par agent-tmux.
+  printf '%s\n' "$t1" >"$cf"; printf '0b\n' >"$(STATE_DIR="$stdir" tab_via_file s14)"
+  out=$(STATE_DIR="$stdir" STUB_SESS="T2-qveys" STUB_BID="$b2" resolve_cached_stubbed s14)
+  if [ "$out" = "$t2" ]; then report_tab_case "17 cache via 0b non fiable -> ré-résolu" 0
+  else report_tab_case "17 cache via 0b" 1 "tab='$out'"; fi
+  rm -f "$cf"
+
+  # 17b. agent-tmux-tabid est fiable : mis en cache.
+  out=$(STATE_DIR="$stdir" STUB_SESS="T2-qveys" STUB_BID="" STUB_TID="$t2" resolve_cached_stubbed s14)
+  if [ "$out" = "$t2" ] && [ "$(tr -d '[:space:]' <"$cf" 2>/dev/null)" = "$t2" ]; then
+    report_tab_case "17b agent-tmux-tabid mis en cache" 0
+  else report_tab_case "17b cache agent-tmux-tabid" 1 "tab='$out'"; fi
+  rm -f "$cf"
+
   selftest_tab_cleanup
   trap - EXIT
   rm -rf "$tmpdir" 2>/dev/null || true
@@ -4099,7 +4269,7 @@ cmd_selftest_block() {
   mkdir -p "$BLK_FAKE/wave/db" "$BLK_FAKE/state"
   sqlite3 "$BLK_FAKE/wave/db/waveterm.db" \
     "CREATE TABLE db_tab(oid TEXT, data TEXT); CREATE TABLE db_workspace(oid TEXT, data TEXT);
-     INSERT INTO db_tab VALUES('faketab','{\"name\":\"T9\"}');"
+     INSERT INTO db_tab VALUES('aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa','{\"name\":\"T9\"}');"
   printf '%s\n' "$user_blk" >"$BLK_FAKE/blocks"   # the user's own terminal
   cat >"$BLK_FAKE/wsh" <<'FAKE'
 #!/usr/bin/env bash
@@ -4122,7 +4292,7 @@ FAKE
 
   blk_run() {  # wsh-live.sh in the fake Wave; stderr -> $BLK_FAKE/err
     env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID PATH="$BLK_FAKE:$PATH" \
-      WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=faketab \
+      WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa \
       "$SCRIPT_DIR/wsh-live.sh" "$@" >/dev/null 2>"$BLK_FAKE/err"
   }
   listed() { grep -qx "$1" "$BLK_FAKE/blocks"; }
@@ -4184,7 +4354,7 @@ FAKE
   else
     rc=0
     env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-      WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=faketab \
+      WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa \
       "$SCRIPT_DIR/wsh-live.sh" stop "${BLK_PFX}-6" >/dev/null 2>"$BLK_FAKE/err" || rc=$?
     err=$(cat "$BLK_FAKE/err")
     if [ "$rc" -eq 0 ] && ! tmux has-session -t "=${BLK_PFX}-6" 2>/dev/null \
