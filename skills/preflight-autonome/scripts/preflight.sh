@@ -11,6 +11,8 @@ usage() {
 Usage: preflight.sh [--ssh HOST]... [--tailscale-ssh HOST]... [--env FILE KEY]...
                     [--cmd "libellé::commande"]... [--no-auto]
 Env: PREFLIGHT_TIMEOUT (secondes par sonde, défaut 8)
+--cmd est exécuté via bash -c : entrée de confiance uniquement.
+Un hôte ne peut pas commencer par « - ».
 USAGE
 }
 
@@ -42,25 +44,32 @@ probe() {
 env_probe() { # FILE KEY : jamais la valeur
   local file=$1 key=$2 line val
   if [ ! -f "$file" ]; then emit FAIL "env $key" "ABSENT (fichier $file introuvable)"; return; fi
-  line=$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" | tail -n1)
+  line=$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" | tail -n1) # clé validée (^[A-Za-z_][A-Za-z0-9_]*$)
   if [ -z "$line" ]; then emit FAIL "env $key" "ABSENT"; return; fi
   val=${line#*=}
-  val=$(printf '%s' "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^[\"']//" -e "s/[\"']\$//")
+  val=$(printf '%s' "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^[\"']//" -e "s/[\"']\$//" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   if [ -n "$val" ]; then emit PASS "env $key" "SET"; else emit FAIL "env $key" "EMPTY"; fi
 }
+
+ok_host() { case $1 in -*|'') return 1 ;; esac; }
+ok_key() { printf '%s' "$1" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$'; }
 
 ssh_list=() tsh_list=() env_list=() cmd_list=() AUTO=1
 while [ $# -gt 0 ]; do
   case $1 in
-    --ssh) [ $# -ge 2 ] || { usage; exit 2; }; ssh_list+=("$2"); shift 2 ;;
-    --tailscale-ssh) [ $# -ge 2 ] || { usage; exit 2; }; tsh_list+=("$2"); shift 2 ;;
-    --env) [ $# -ge 3 ] || { usage; exit 2; }; env_list+=("$2|$3"); shift 3 ;;
+    --ssh) { [ $# -ge 2 ] && ok_host "$2"; } || { usage; exit 2; }; ssh_list+=("$2"); shift 2 ;;
+    --tailscale-ssh) { [ $# -ge 2 ] && ok_host "$2"; } || { usage; exit 2; }; tsh_list+=("$2"); shift 2 ;;
+    --env) { [ $# -ge 3 ] && ok_key "$3"; } || { usage; exit 2; }; env_list+=("$2|$3"); shift 3 ;;
     --cmd) [ $# -ge 2 ] || { usage; exit 2; }; cmd_list+=("$2"); shift 2 ;;
     --no-auto) AUTO=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage; exit 2 ;;
   esac
 done
+
+# le harnais GitHub n'est pas toujours dans le PATH (ex. OpenCode)
+HARNESS=/usr/local/libexec/claude-gh-harness/bin
+[ -d "$HARNESS" ] && PATH="$PATH:$HARNESS"
 
 if [ "$AUTO" -eq 1 ]; then
   if command -v claude-gh-check >/dev/null 2>&1; then probe "claude-gh-check" FAIL claude-gh-check
@@ -72,11 +81,11 @@ if [ "$AUTO" -eq 1 ]; then
 fi
 
 for h in ${ssh_list[@]+"${ssh_list[@]}"}; do
-  probe "ssh $h" FAIL ssh -o BatchMode=yes -o "ConnectTimeout=$T" "$h" true
+  probe "ssh $h" FAIL ssh -o BatchMode=yes -o "ConnectTimeout=$T" -- "$h" true
 done
 for h in ${tsh_list[@]+"${tsh_list[@]}"}; do
   before=$FAILS
-  probe "tailscale ssh $h" FAIL tailscale ssh "$h" true
+  probe "tailscale ssh $h" FAIL tailscale ssh -- "$h" true
   if [ "$FAILS" -gt "$before" ] && command -v tailscale >/dev/null 2>&1; then
     emit WARN "tailscale status" "$(run_t tailscale status 2>&1 </dev/null | head -n3 | tr '\n\t' '  ' | cut -c1-160)"
   fi

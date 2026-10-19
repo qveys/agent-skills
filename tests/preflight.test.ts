@@ -77,4 +77,31 @@ describe("preflight.sh", () => {
     const r = run(["--cmd", "slow::sleep 10"]);
     expect(r.out).toMatch(/FAIL\tslow\ttimeout/);
   });
+
+  it("hôte commençant par - : rejeté, usage, code 2, ssh jamais appelé", () => {
+    for (const flag of ["--ssh", "--tailscale-ssh"]) {
+      const r = run([flag, "-oProxyCommand=touch /tmp/pwn"], {
+        ssh: "echo CALLED",
+        tailscale: "echo CALLED",
+      });
+      expect(r.code).toBe(2);
+      expect(r.out).not.toContain("CALLED");
+    }
+  });
+
+  it("clé --env invalide (regex) : rejetée, code 2", () => {
+    const dir = mkdtempSync(join(tmpdir(), "env-"));
+    const f = join(dir, ".env");
+    writeFileSync(f, "API_KEY=x\n");
+    expect(run(["--env", f, "API.KEY"]).code).toBe(2);
+  });
+
+  it("valeur faite de blancs (même entre guillemets) : EMPTY", () => {
+    const dir = mkdtempSync(join(tmpdir(), "env-"));
+    const f = join(dir, ".env");
+    writeFileSync(f, 'A="   "\nB=   \n');
+    const r = run(["--env", f, "A", "--env", f, "B"]);
+    expect(r.out).toMatch(/FAIL\tenv A\tEMPTY/);
+    expect(r.out).toMatch(/FAIL\tenv B\tEMPTY/);
+  });
 });

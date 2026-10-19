@@ -27,7 +27,7 @@ Une sonde = une commande, timeout court, aucun effet de bord. Lancer :
 ```bash
 scripts/preflight.sh --ssh HOTE --tailscale-ssh HOTE --env .env CLE --cmd "libellé::commande"
 ```
-Options répétables. Sondes automatiques : `claude-gh-check`, présence de
+Options répétables. `--cmd` est exécuté via `bash -c` : entrée de confiance uniquement. Un hôte ne peut pas commencer par `-` (injection d'option ssh), une clé `--env` doit être un nom de variable valide ; sinon code 2. Sondes automatiques : `claude-gh-check`, présence de
 `git-signed-commit`, `gh auth status`, `sudo -n true` (`--no-auto` pour les couper).
 Sortie : `PASS|FAIL|WARN<TAB>libellé<TAB>détail`, code retour = nombre de FAIL.
 Secrets : seulement SET / EMPTY / ABSENT, jamais la valeur. Computer-use : vérifier
@@ -48,7 +48,7 @@ consigner, signaler après.
 ## 4. Règles permanentes
 Avant de rédiger un brief de sous-agent, relire CLAUDE.md global, la mémoire et les
 règles du dépôt. Si un harnais d'accès existe (ex. shims git/gh), l'imposer dans
-chaque brief : un sous-agent hérite du CLAUDE.md mais pas de la conversation : y recopier les règles utiles au contrat de la tâche, dont le harnais d'accès.
+chaque brief : dans Claude Code, un sous-agent hérite du CLAUDE.md mais pas de la conversation ; ailleurs (Codex, Hermes, Paperclip…) recopier les règles dans le brief. Dans tous les cas y mettre les règles utiles au contrat de la tâche, dont le harnais d'accès.
 
 ## 5. Lancement
 - Proposer à l'utilisateur la condition `/goal` : objectif = vider la TODO, condition vérifiable
