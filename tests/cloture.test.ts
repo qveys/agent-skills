@@ -193,6 +193,7 @@ describe("cloture hooks", () => {
         return lines.filter((l) => l.to === "debug").map((l) => l.text);
       },
       start: () => h["turn.start"]($, {}, next),
+      end: () => h["session.end"]($, {}, next),
       call: (tool: string, command?: string) =>
         h["tool.call"]($, { tool, command }, next),
       done: async (reason = "answer") => {
@@ -270,7 +271,7 @@ describe("cloture hooks", () => {
     await e.start();
     await e.done();
     expect(e.shown).toEqual([]);
-    expect(e.debug.at(-1)).toContain("erreur boom");
+    expect(e.debug.at(-1)).toBe("tour 1 : erreur:modele");
     const bad = await setup(reply("BLOQUE | Mot de passe azerty"), []);
     await bad.start();
     await bad.done();
@@ -303,5 +304,54 @@ describe("cloture hooks", () => {
       "tour 3 : silence (ni premier tour ni tour modifiant)",
     );
     expect(c.shown).toEqual([]);
+  });
+
+  it("session.end : réponse tardive, rien en debug ni en transcript", async () => {
+    let release: () => void = () => {};
+    const c = await setup(
+      () =>
+        new Promise((r) => {
+          release = () => r({ isAnswered: true, text: "OK" });
+        }),
+      [],
+    );
+    await c.start();
+    await c.done();
+    const before = c.debug.length;
+    await c.end();
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.shown).toEqual([]);
+    expect(c.debug).toHaveLength(before);
+  });
+
+  it("erreur contenant un secret : absent de la trace", async () => {
+    const c = await setup(async () => {
+      throw new Error("credential=SECRET_CANARY");
+    }, []);
+    await c.start();
+    await c.done();
+    expect(c.debug.join("\n")).not.toContain("SECRET_CANARY");
+    expect(c.debug.at(-1)).toBe("tour 1 : erreur:modele");
+  });
+
+  it("ui.log défaillant : aucun unhandledRejection", async () => {
+    const seen: unknown[] = [];
+    const onRej = (r: unknown) => seen.push(r);
+    process.on("unhandledRejection", onRej);
+    try {
+      const c = await setup(async () => {
+        throw new Error("x");
+      }, []);
+      c.$.ui.log = () => {
+        throw new Error("log KO");
+      };
+      await c.start();
+      await c.done();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(seen).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRej);
+    }
   });
 });

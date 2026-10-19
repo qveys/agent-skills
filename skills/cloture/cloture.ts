@@ -35,7 +35,11 @@ function dbg(
   n: number,
   msg: string,
 ) {
-  $.ui.log(`tour ${n} : ${msg}`, { to: "debug" });
+  try {
+    $.ui.log(`tour ${n} : ${msg}`, { to: "debug" });
+  } catch {
+    // journalisation best-effort : ne jamais relancer (la tâche de fond est détachée)
+  }
 }
 
 export const register: Register = (on) => {
@@ -84,64 +88,67 @@ export const register: Register = (on) => {
     isTouched = false;
     stop.abort();
     const ctl = (stop = new AbortController());
+    // Chaque await est suivi d'un contrôle d'annulation AVANT toute trace ou effet (session.end, nouveau tour).
+    const live = () => !ctl.signal.aborted;
+    const log = (msg: string) => live() && dbg($, n, msg);
+    let phase = "session";
     void (async () => {
-      try {
-        const id = await $.session.id();
-        const isFirst = !seen.has(id);
-        if (!isFirst && !touched)
-          return dbg($, n, "silence (ni premier tour ni tour modifiant)");
-        dbg($, n, `appel (premier=${isFirst} modifiant=${touched})`);
-        const all = (await $.session.messages()) as Msg[];
-        if (!Array.isArray(all))
-          return dbg($, n, "silence (messages illisibles)");
-        const tasks = extractTasks(all);
-        const r = await $.model.complete(
-          {
-            model: "haiku",
-            system: SYSTEM,
-            prompt: buildInput(
-              all.slice(-40),
-              tasks,
-              touched,
-              all.filter((m) => m.role === "user" && !m.toolResults?.length)
-                .length,
-            ),
-            maxTokens: 200,
-            timeoutMs: 20_000,
-          },
-          { signal: ctl.signal },
-        );
-        if (!r.isAnswered)
-          return dbg($, n, `modèle sans réponse (${r.reason})`);
-        if (!ctl.signal.aborted) seen.add(id); // « premier tour » consommé seulement après un 1er appel réussi
-        const reply = parseReply(r.text);
-        const text = compose(reply, tasks);
-        dbg(
-          $,
-          n,
-          `réponse ${reply ? reply.state : "invalide"} -> ${text ? "ligne" : "silence"}`,
-        );
-        // annulé entre-temps (nouveau tour, fin de session) : rien n'est écrit
-        if (text && !ctl.signal.aborted) {
-          // Ligne de transcript (dim, jamais lue par le modèle) ; ※ en tête comme le Session recap natif.
-          $.ui.log(
-            text
-              .split("\n")
-              .map((l, i) => (i ? "  " : "※ ") + l)
-              .join("\n"),
-          );
-        }
-      } catch (err) {
-        dbg(
-          $,
-          n,
-          `erreur ${err instanceof Error ? err.message : String(err)}`.slice(
-            0,
-            200,
+      const id = await $.session.id();
+      if (!live()) return;
+      const isFirst = !seen.has(id);
+      if (!isFirst && !touched)
+        return log("silence (ni premier tour ni tour modifiant)");
+      log(`appel (premier=${isFirst} modifiant=${touched})`);
+      const all = (await $.session.messages()) as Msg[];
+      if (!live()) return;
+      if (!Array.isArray(all)) return log("silence (messages illisibles)");
+      const tasks = extractTasks(all);
+      phase = "modele";
+      const r = await $.model.complete(
+        {
+          model: "haiku",
+          system: SYSTEM,
+          prompt: buildInput(
+            all.slice(-40),
+            tasks,
+            touched,
+            all.filter((m) => m.role === "user" && !m.toolResults?.length)
+              .length,
           ),
+          maxTokens: 200,
+          timeoutMs: 20_000,
+        },
+        { signal: ctl.signal },
+      );
+      if (!live()) return;
+      if (!r.isAnswered) return log(`modèle sans réponse (${r.reason})`);
+      seen.add(id); // « premier tour » consommé seulement après un 1er appel réussi
+      const reply = parseReply(r.text);
+      const text = compose(reply, tasks);
+      log(
+        `réponse ${reply ? reply.state : "invalide"} -> ${text ? "ligne" : "silence"}`,
+      );
+      if (text && live()) {
+        // Ligne de transcript (dim, jamais lue par le modèle) ; ※ en tête comme le Session recap natif.
+        // Limite de l'API ui.log : elle préfixe elle-même « ● cloture: » avant ce ※, non contournable ici.
+        $.ui.log(
+          text
+            .split("\n")
+            .map((l, i) => (i ? "  " : "※ ") + l)
+            .join("\n"),
         );
       }
-    })();
+    })().catch((err) => {
+      // Code prédéfini uniquement : jamais err.message (texte libre potentiellement sensible).
+      const name = err instanceof Error ? err.name : "";
+      log(
+        name === "TimeoutError" || name === "AbortError"
+          ? "erreur:timeout"
+          : phase === "modele"
+            ? "erreur:modele"
+            : "erreur:inconnue",
+      );
+    });
     return next(e);
   });
 };
