@@ -26,6 +26,12 @@
       "strict": false
     },
     {
+      "name": "vps-dokploy",
+      "source": "./skills/vps-dokploy",
+      "description": "Operate the vps-dokploy production server: Dokploy compose apps, file mounts, deploy webhooks, and the Housekeeper stack",
+      "strict": false
+    },
+    {
       "name": "chantier-relais",
       "source": "./skills/chantier-relais",
       "description": "Découper un plan ou un gros projet en étapes exécutables par petites sessions",
