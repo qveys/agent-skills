@@ -165,27 +165,10 @@ describe("cloture hooks", () => {
     complete: () => Promise<unknown>,
     messages: unknown[],
   ) => {
-    let text: string | null = null;
+    const lines: { text: string; to: string }[] = [];
     vi.resetModules();
-    vi.doMock("claude-code", () => ({
-      atom: () => ({}),
-      read: async () => text,
-      update: async (
-        _: unknown,
-        __: unknown,
-        f: (c: string | null) => string | null,
-      ) => {
-        text = f(text);
-      },
-    }));
-    // JSX jamais rendu ici (ui.render non testé) : runtime factice, react n'est pas une dépendance du dépôt.
-    for (const m of ["react/jsx-dev-runtime", "react/jsx-runtime"])
-      vi.doMock(m, () => ({
-        jsx: () => null,
-        jsxDEV: () => null,
-        Fragment: null,
-      }));
-    const path = "../skills/cloture/cloture.tsx";
+    vi.doMock("claude-code", () => ({}));
+    const path = "../skills/cloture/cloture.ts";
     const { register } = await import(/* @vite-ignore */ path);
     const h: Record<string, H> = {};
     register((name: string, ...r: unknown[]) => {
@@ -194,50 +177,181 @@ describe("cloture hooks", () => {
     const $ = {
       session: { id: async () => "s1", messages: async () => messages },
       model: { complete: vi.fn(complete) },
+      ui: {
+        log: (text: string, o?: { to: string }) =>
+          lines.push({ text, to: o?.to ?? "transcript" }),
+      },
     };
     const next = async (e: unknown) => e;
+    const flush = () => new Promise((r) => setTimeout(r, 0));
     return {
       $,
-      get text() {
-        return text;
+      get shown() {
+        return lines.filter((l) => l.to === "transcript").map((l) => l.text);
+      },
+      get debug() {
+        return lines.filter((l) => l.to === "debug").map((l) => l.text);
       },
       start: () => h["turn.start"]($, {}, next),
+      end: () => h["session.end"]($, {}, next),
       call: (tool: string, command?: string) =>
         h["tool.call"]($, { tool, command }, next),
-      done: () => h["turn.complete"]($, { reason: "answer" }, next),
+      done: async (reason = "answer") => {
+        await h["turn.complete"]($, { reason }, next);
+        await flush();
+      },
     };
   };
   const reply = (t: string) => async () => ({ isAnswered: true, text: t });
 
-  it("1er tour appelle, tour non modifiant suivant ne rappelle pas, turn.start efface", async () => {
+  it("1er tour : ligne de transcript avec ※, jamais effacée ; tour non modifiant ne rappelle pas", async () => {
     const c = await setup(reply("ESTIMATION 3"), []);
-    await c.done();
-    expect(c.$.model.complete).toHaveBeenCalledTimes(1);
-    expect(c.text).toBe("Clôture : ~3 étapes");
     await c.start();
-    expect(c.text).toBeNull();
     await c.done();
     expect(c.$.model.complete).toHaveBeenCalledTimes(1);
+    expect(c.shown).toEqual(["※ Clôture : ~3 étapes"]);
+    await c.start();
+    await c.done();
+    expect(c.$.model.complete).toHaveBeenCalledTimes(1);
+    expect(c.shown).toHaveLength(1);
     await c.start();
     await c.call("Edit");
     await c.done();
     expect(c.$.model.complete).toHaveBeenCalledTimes(2);
+    expect(c.shown).toHaveLength(2);
   });
 
-  it("erreur ou réponse invalide : rien d'affiché", async () => {
+  it("ligne multiple : ※ sur la première, retrait sur les suivantes", async () => {
+    const c = await setup(reply("BLOQUE\nATTENTE"), []);
+    await c.start();
+    await c.done();
+    expect(c.shown).toEqual([
+      "※ Clôture : bloqué sur toi\n  en attente d'une action différée",
+    ]);
+  });
+
+  it("le hook rend la main sans attendre le modèle", async () => {
+    let release: () => void = () => {};
+    const c = await setup(
+      () =>
+        new Promise((r) => {
+          release = () => r({ isAnswered: true, text: "OK" });
+        }),
+      [],
+    );
+    await c.start();
+    await c.done();
+    expect(c.shown).toEqual([]);
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.shown).toEqual(["※ Clôture : OK"]);
+  });
+
+  it("nouveau tour pendant l'appel : annulé, rien d'affiché", async () => {
+    let release: () => void = () => {};
+    const c = await setup(
+      () =>
+        new Promise((r) => {
+          release = () => r({ isAnswered: true, text: "OK" });
+        }),
+      [],
+    );
+    await c.start();
+    await c.done();
+    await c.start();
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.shown).toEqual([]);
+  });
+
+  it("erreur ou réponse invalide : rien d'affiché, trace debug", async () => {
     const e = await setup(async () => {
       throw new Error("boom");
     }, []);
+    await e.start();
     await e.done();
-    expect(e.text).toBeNull();
+    expect(e.shown).toEqual([]);
+    expect(e.debug.at(-1)).toBe("tour 1 : erreur:modele");
     const bad = await setup(reply("BLOQUE | Mot de passe azerty"), []);
+    await bad.start();
     await bad.done();
-    expect(bad.text).toBeNull();
+    expect(bad.shown).toEqual([]);
+    expect(bad.debug.at(-1)).toContain("invalide");
   });
 
-  it("timeout (non répondu) : rien d'affiché", async () => {
-    const c = await setup(async () => ({ isAnswered: false, text: "" }), []);
+  it("timeout (non répondu) : rien d'affiché, trace debug", async () => {
+    const c = await setup(
+      async () => ({ isAnswered: false, reason: "aborted" }),
+      [],
+    );
+    await c.start();
     await c.done();
-    expect(c.text).toBeNull();
+    expect(c.shown).toEqual([]);
+    expect(c.debug.at(-1)).toContain("sans réponse (aborted)");
+  });
+
+  it("une trace debug par déclenchement, aucune à l'écran, aucun texte libre", async () => {
+    const c = await setup(reply("SILENCE"), []);
+    await c.start();
+    await c.done("aborted");
+    expect(c.debug).toEqual(["tour 1 : silence (reason=aborted)"]);
+    await c.start();
+    await c.done();
+    expect(c.debug.at(-1)).toBe("tour 2 : réponse SILENCE -> silence");
+    await c.start();
+    await c.done();
+    expect(c.debug.at(-1)).toBe(
+      "tour 3 : silence (ni premier tour ni tour modifiant)",
+    );
+    expect(c.shown).toEqual([]);
+  });
+
+  it("session.end : réponse tardive, rien en debug ni en transcript", async () => {
+    let release: () => void = () => {};
+    const c = await setup(
+      () =>
+        new Promise((r) => {
+          release = () => r({ isAnswered: true, text: "OK" });
+        }),
+      [],
+    );
+    await c.start();
+    await c.done();
+    const before = c.debug.length;
+    await c.end();
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.shown).toEqual([]);
+    expect(c.debug).toHaveLength(before);
+  });
+
+  it("erreur contenant un secret : absent de la trace", async () => {
+    const c = await setup(async () => {
+      throw new Error("credential=SECRET_CANARY");
+    }, []);
+    await c.start();
+    await c.done();
+    expect(c.debug.join("\n")).not.toContain("SECRET_CANARY");
+    expect(c.debug.at(-1)).toBe("tour 1 : erreur:modele");
+  });
+
+  it("ui.log défaillant : aucun unhandledRejection", async () => {
+    const seen: unknown[] = [];
+    const onRej = (r: unknown) => seen.push(r);
+    process.on("unhandledRejection", onRej);
+    try {
+      const c = await setup(async () => {
+        throw new Error("x");
+      }, []);
+      c.$.ui.log = () => {
+        throw new Error("log KO");
+      };
+      await c.start();
+      await c.done();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(seen).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRej);
+    }
   });
 });
