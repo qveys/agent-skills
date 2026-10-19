@@ -290,6 +290,12 @@
       "strict": false
     },
     {
+      "name": "cloture",
+      "source": "./skills/cloture",
+      "description": "Mod : indicateur de clôture de session (une ligne de statut après chaque tour)",
+      "strict": false
+    },
+    {
       "name": "wait-what",
       "source": "./vendor/mattpocock-skills/wait-what",
       "description": "Re-pitch the last message in plain terms when it did not land.",

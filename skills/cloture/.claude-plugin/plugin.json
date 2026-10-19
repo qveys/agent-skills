@@ -1,0 +1,1 @@
+{ "name": "cloture", "version": "0.1.0", "description": "Indicateur de clôture de session (une ligne de statut après chaque tour).", "types": "./cloture-state.d.ts", "author": { "name": "Qveys" } }
