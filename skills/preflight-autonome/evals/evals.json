@@ -1,0 +1,26 @@
+{
+  "skill_name": "preflight-autonome",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "je-pars-todo-longue",
+      "prompt": "Je pars pour la journée. Voici ma TODO dans todo.md : 1) pousser un correctif sur le dépôt GitHub, 2) redémarrer un service sur le serveur srv-a via ssh, 3) lire la clé API_KEY dans .env pour appeler l'API. Sois autonome et continue sans moi.",
+      "expected_output": "Avant d'agir : tableau item | accès | sonde | résultat | classe | action, sondes lecture seule exécutées (scripts/preflight.sh), secret jamais affiché, proposition de condition /goal avec borne",
+      "files": []
+    },
+    {
+      "id": 1,
+      "eval_name": "ssh-refuse-diagnostic",
+      "prompt": "laisse tourner la TODO. Le ssh vers srv-a échoue avec 'Permission denied (publickey)'. Est-ce que je dois te débloquer ?",
+      "expected_output": "Ne conclut pas à l'impossibilité : essaie tailscale ssh, statut tailscale, utilisateur, message complet ; classe CONTOURNABLE ou RÉELLEMENT HUMAIN avec cause exacte ; ne stoppe pas la boucle",
+      "files": []
+    },
+    {
+      "id": 2,
+      "eval_name": "tache-courte-hors-sujet",
+      "prompt": "Renomme la variable foo en bar dans utils.py, je suis là.",
+      "expected_output": "Le skill ne se déclenche pas : tâche courte et interactive",
+      "files": []
+    }
+  ]
+}

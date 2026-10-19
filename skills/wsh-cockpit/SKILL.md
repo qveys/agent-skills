@@ -72,6 +72,7 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 - **`spawn`, jamais `start cockpit`** (nom réutilisé par d'autres agents) ; `--force` seulement pour une 2e fenêtre délibérée.
 - **Cockpit nommé par l'utilisateur** (`WSH_COCKPIT_ADOPT` inclus) : adopte-le, n'en crée pas une seconde.
 - **`--situate` obligatoire juste après `spawn`** ; `--pre <host>` est un plus (pré-push des helpers avant le hop), pas un substitut — une session réutilisée peut être restée en ssh.
+- **Avant `spawn`, savoir dans quel onglet Wave est l'utilisateur** ; `--tab <nom>` si l'agent n'est pas dans un bloc Wave/tmux fiable. Jamais se fier à `WAVETERM_TABID` seul ; vérifier la ligne « onglet utilisé » après `spawn`.
 - **Bannières obligatoires** pour tout plan multi-étapes, jamais `echo` ni markdown nu.
 - **Une seule session SSH persistante** par hôte, pas une rafale de one-shots.
 - **Toujours terminer les commandes par `2>&1`** — non négociable.
@@ -141,4 +142,4 @@ résous-le **par le service** et exige **un seul** conteneur — jamais
 ## Nettoyage
 
 **Attends au moins 60s** avant de traiter une session idle comme orpheline — elle
-peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux.
+peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux (avertissement stderr si échec).

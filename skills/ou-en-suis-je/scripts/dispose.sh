@@ -18,6 +18,7 @@ set -euo pipefail
 
 [ $# -ge 2 ] || { echo "usage : dispose.sh ID8 CLOS|ATTEND|REPRENDRE [\"note\"]" >&2; exit 2; }
 case "$2" in CLOS|ATTEND|REPRENDRE) ;; *) echo "STATUT invalide : $2 (CLOS|ATTEND|REPRENDRE)" >&2; exit 2 ;; esac
+set -- "${1:0:8}" "${@:2}"   # accepte aussi l'UUID complet (colonne 2 de collect.sh)
 # Validation stricte de l'ID8 (8 caractères alphanumériques minuscules) : un ID malformé
 # est rejeté plutôt que corrigé en silence, pour ne pas polluer le TSV.
 case "$1" in

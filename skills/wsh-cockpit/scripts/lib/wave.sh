@@ -122,8 +122,43 @@ tab_count_candidates() {
   printf '%s\n' "$1" | wc -l | tr -d ' '
 }
 
+# Strict 8-4-4-4-12 lowercase-hex UUID (explicit ranges: locale-proof). Every
+# id interpolated into SQL goes through this first (also keeps LIKE wildcards
+# and short fragments such as 'a' out).
+is_uuid() {
+  [[ $1 =~ ^[0123456789abcdef]{8}-[0123456789abcdef]{4}-[0123456789abcdef]{4}-[0123456789abcdef]{4}-[0123456789abcdef]{12}$ ]]
+}
+
+# Tab oid whose data blob lists block $2 (ro URI $1); $2 must be a UUID.
+tab_of_block() {
+  is_uuid "$2" || return 1
+  sqlite3 "$1" "SELECT oid FROM db_tab WHERE data LIKE '%$2%' LIMIT 1;" 2>/dev/null
+}
+
+# Session of the tmux pane the agent runs in, found by walking this shell's
+# ancestry (ps -o ppid=) up to a pid listed by `tmux list-panes -a`.
+agent_tmux_session() {
+  local pid=$$ panes s i
+  command -v tmux >/dev/null 2>&1 || return 1
+  panes=$(tmux list-panes -a -F '#{pane_pid} #{session_name}' 2>/dev/null) || return 1
+  for i in $(seq 40); do
+    s=$(printf '%s\n' "$panes" | awk -v p="$pid" '$1==p{sub(/^[^ ]+ /,""); print; exit}')
+    [ -n "$s" ] && { printf '%s\n' "$s"; return 0; }
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    case "$pid" in ''|*[!0-9]*|0|1) return 1 ;; esac
+  done
+  return 1
+}
+
+# How resolve_live_tab found the tab (0a/agent-tmux/0b/TABID/activetab). It
+# runs in the caller's $(…) subshell, so the answer goes to the file named by
+# TAB_VIA_OUT (set by resolve_live_tab_cached, one file per cockpit session).
+tab_via_file() { printf '%s/tabvia-%s\n' "$STATE_DIR" "$(printf '%s' "$1" | tr -cs 'A-Za-z0-9_.-' '_')"; }
+tab_via_trusted() { case "$1" in 0a|agent-tmux|agent-tmux-tabid) return 0 ;; *) return 1 ;; esac; }
+note_tab_via() { [ -z "${TAB_VIA_OUT:-}" ] || printf '%s\n' "$1" >"$TAB_VIA_OUT" 2>/dev/null || true; }
+
 resolve_live_tab() {
-  local ro tab ws sessname tab8
+  local ro tab ws sessname tab8 via="" bid
   ro=$(wave_db_ro) || return 1
 
   # 0. The tab hosting the INITIATING shell — best signal first. The env
@@ -133,6 +168,13 @@ resolve_live_tab() {
   #   a. under the wave-init tmux wrapping, the session group is named
   #      wave-<tab8> (1 tab = 1 group, Wave UUIDs are stable) — the freshest
   #      binding there is; resolve tab8 back to the full oid;
+  #   agent-tmux. else the agent's own tmux session (process ancestry): its
+  #      session env holds the FRESH WAVETERM_BLOCKID the shell env lost;
+  #   A tmux session env is a SNAPSHOT taken at session creation (it can lag
+  #   behind a moved block). Accepted by design for lack of a better source,
+  #   with the tab's existence in the DB always checked.
+  #   Order: agent-tmux BEFORE b — when the shell env and the agent's tmux
+  #   session disagree, the session wins (the shell env is the stale one).
   #   b. else find the tab whose data JSON (its blockids list) contains
   #      WAVETERM_BLOCKID — a LIKE match on db_tab.data, since blockids is a
   #      key inside that blob, not a column (survives block moves).
@@ -143,26 +185,47 @@ resolve_live_tab() {
       # char or stray punctuation) must NOT reach the SQL interpolation below.
       wave-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|wave-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-*)
         tab8=${sessname#wave-}; tab8=${tab8%%-*}
-        tab=$(sqlite3 "$ro" "SELECT oid FROM db_tab WHERE oid LIKE '${tab8}%';" 2>/dev/null)
+        case "$tab8" in *[!0123456789abcdef]*) tab8="" ;; esac   # locale-proof hex guard
+        [ -z "$tab8" ] || tab=$(sqlite3 "$ro" "SELECT oid FROM db_tab WHERE oid LIKE '${tab8}%';" 2>/dev/null)
         case "$tab" in *$'\n'*) tab="" ;; esac   # ambiguous prefix — fall through
+        [ -z "$tab" ] || via=0a
         ;;
     esac
   fi
+  if [ -z "${tab:-}" ] && sessname=$(agent_tmux_session); then
+    bid=$(tmux show-environment -t "=$sessname" WAVETERM_BLOCKID 2>/dev/null) || bid=""
+    tab=$(tab_of_block "$ro" "${bid#WAVETERM_BLOCKID=}")
+    [ -z "$tab" ] || via=agent-tmux
+    if [ -z "$tab" ]; then   # no usable BLOCKID: the session may carry only a TABID
+      tab=$(tmux show-environment -t "=$sessname" WAVETERM_TABID 2>/dev/null) || tab=""
+      tab=${tab#WAVETERM_TABID=}
+      is_uuid "$tab" || tab=""
+      if [ -n "$tab" ] && [ "$(sqlite3 "$ro" "SELECT count(*) FROM db_tab WHERE oid='$tab';" 2>/dev/null)" = 1 ]; then
+        via=agent-tmux-tabid
+      else tab=""; fi
+    fi
+  fi
   if [ -z "${tab:-}" ] && [ -n "${WAVETERM_BLOCKID:-}" ]; then
-    tab=$(sqlite3 "$ro" \
-      "SELECT oid FROM db_tab WHERE data LIKE '%${WAVETERM_BLOCKID//\'/}%' LIMIT 1;" 2>/dev/null)
+    tab=$(tab_of_block "$ro" "$WAVETERM_BLOCKID")
+    [ -z "$tab" ] || via=0b
   fi
   if [ -n "${tab:-}" ] && [ "$(sqlite3 "$ro" \
         "SELECT count(*) FROM db_tab WHERE oid='${tab//\'/}';" 2>/dev/null)" = "1" ]; then
+    note_tab_via "$via"
     printf '%s\n' "$tab"; return 0
   fi
   tab=""
 
-  # 1. Trust the env tab only if it actually exists in the DB.
-  if [ -n "${WAVETERM_TABID:-}" ]; then
+  # 1. Trust the env tab only if it actually exists in the DB — but it can be
+  # inherited and STALE (the agent's shell outlives its tab): warn, and fail
+  # under WSH_TAB_STRICT=1 (opt-in).
+  if [ -n "${WAVETERM_TABID:-}" ] && is_uuid "$WAVETERM_TABID"; then
     if [ "$(sqlite3 "$ro" \
           "SELECT count(*) FROM db_tab WHERE oid='${WAVETERM_TABID//\'/}';" \
           2>/dev/null)" = "1" ]; then
+      echo "⚠️  onglet déduit de WAVETERM_TABID seul (peut être périmé) : passer --tab <nom>" >&2
+      [ "${WSH_TAB_STRICT:-0}" = 1 ] && return 1
+      note_tab_via TABID
       printf '%s\n' "$WAVETERM_TABID"; return 0
     fi
   fi
@@ -180,6 +243,7 @@ resolve_live_tab() {
   # Sanity-check the resolved tab actually exists as a tab row.
   if [ -n "${tab:-}" ] && [ "$(sqlite3 "$ro" \
         "SELECT count(*) FROM db_tab WHERE oid='${tab//\'/}';" 2>/dev/null)" = "1" ]; then
+    note_tab_via activetab
     printf '%s\n' "$tab"; return 0
   fi
   return 1
@@ -200,10 +264,12 @@ tab_cache_file() { printf '%s/tab-%s\n' "$STATE_DIR" "$(printf '%s' "$1" | tr -c
 resolve_live_tab_cached() {
   # ${1:-}, not $1: the documented no-session mode above (called by `doctor`)
   # omits the argument entirely, which would abort under set -u otherwise.
-  local sess="${1:-}" cache tab ro
+  local sess="${1:-}" cache tab ro TAB_VIA_OUT=""  # dynamic scope: seen by resolve_live_tab
   if [ -n "$sess" ]; then
     cache=$(tab_cache_file "$sess")
-    if [ -f "$cache" ]; then
+    # Only a cache set by a live signal is trusted; none/0b/activetab/TABID
+    # (or a cache predating the via file) is re-resolved so agent-tmux runs.
+    if [ -f "$cache" ] && tab_via_trusted "$(head -1 "$(tab_via_file "$sess")" 2>/dev/null)"; then
       tab=$(tr -d '[:space:]' <"$cache" 2>/dev/null || true)
       if [ -n "$tab" ] && ro=$(wave_db_ro) && [ "$(sqlite3 "$ro" \
             "SELECT count(*) FROM db_tab WHERE oid='${tab//\'/}';" 2>/dev/null)" = "1" ]; then
@@ -213,17 +279,28 @@ resolve_live_tab_cached() {
       rm -f "$cache" 2>/dev/null || true
     fi
   fi
-  tab=$(resolve_live_tab) || return 1
   if [ -n "$sess" ]; then
     mkdir -p "$STATE_DIR" 2>/dev/null || true
-    printf '%s\n' "$tab" >"$cache" 2>/dev/null || true
+    TAB_VIA_OUT=$(tab_via_file "$sess")
+    tab=$(resolve_live_tab) || return 1
+  else
+    tab=$(resolve_live_tab) || return 1
+  fi
+  # Cache only trusted resolutions: a stale guess would hide agent-tmux (and
+  # the TABID warning) from every later open.
+  if [ -n "$sess" ]; then
+    if tab_via_trusted "$(head -1 "$(tab_via_file "$sess")" 2>/dev/null)"; then
+      printf '%s\n' "$tab" >"$cache" 2>/dev/null || true
+    else
+      rm -f "$cache" 2>/dev/null || true
+    fi
   fi
   printf '%s\n' "$tab"
 }
 
 # Drop a session's cached tab — called from teardown_session (stop/gc) so a
 # closed cockpit never hands a future `open` a stale/recycled tab id.
-tab_cache_invalidate() { rm -f "$(tab_cache_file "$1")" 2>/dev/null || true; }
+tab_cache_invalidate() { rm -f "$(tab_cache_file "$1")" "$(tab_via_file "$1")" 2>/dev/null || true; }
 
 # Per-session state of the Wave block-id `open` last created, same slug
 # convention as tab_cache_file. Lets teardown_session close the block itself
@@ -237,26 +314,41 @@ block_id_store() {
   printf '%s\n' "$id" >"$(block_id_file "$sess")" 2>/dev/null || true
 }
 
-# Best-effort close of a block-<slug> marker given its PATH directly — the
-# primitive block_id_close(sess) below wraps. Split out (step-1.7) so gc's
-# marker-hygiene pass can close a DEAD session's block the same way even
-# though it only ever has the marker file (a slug), never the session's
-# original un-slugified name that block_id_file(sess) would need to
-# re-derive the same path.
+# Close the block a block-<slug> marker records, given the marker PATH — the
+# primitive block_id_close(sess) below wraps (gc's hygiene pass only has the
+# marker, never the original session name).
+#
+# Only the recorded id is ever targeted, never a scan. The id goes as an oref
+# (`block:<uuid>`): a BARE uuid makes wsh resolve it relative to
+# WAVETERM_BLOCKID, which the agent's shell does not have ("resolving blockid:
+# no WAVETERM_BLOCKID env var set") — the old silent failure that left the
+# "detached or ended" block on screen. A block already gone from
+# `wsh blocks list` (closed by the user) is success. Anything else that leaves
+# the block listed is reported on stderr and returns 1.
 block_id_close_path() {  # $1 marker path (block-<slug>)
-  local bf="$1" id
+  local bf="$1" id list i
   [ -f "$bf" ] || return 0
   id=$(tr -d '[:space:]' <"$bf" 2>/dev/null || true)
   rm -f "$bf" 2>/dev/null || true
-  [ -n "$id" ] || return 0
-  command -v wsh >/dev/null 2>&1 || return 0
-  wsh deleteblock -b "$id" >/dev/null 2>&1 || true
+  case "$id" in ''|*[!0-9a-fA-F-]*) return 0 ;; esac
+  if ! command -v wsh >/dev/null 2>&1; then
+    echo "wsh-cockpit: wsh not found — Wave block $id left open, close it by hand" >&2
+    return 1
+  fi
+  for i in 0 1 2 3 4 5 6; do
+    if ! list=$(wsh blocks list --json 2>/dev/null); then
+      echo "wsh-cockpit: \`wsh blocks list\` failed — can't confirm Wave block $id is closed" >&2
+      return 1
+    fi
+    case "$list" in *"\"$id\""*) ;; *) return 0 ;; esac
+    if [ "$i" -eq 0 ]; then wsh deleteblock -b "block:$id" >/dev/null 2>&1 || true
+    else sleep 0.5; fi
+  done
+  echo "wsh-cockpit: failed to close Wave block $id (still in \`wsh blocks list\`) — run: wsh deleteblock -b block:$id" >&2
+  return 1
 }
 
-# Best-effort close of the block remembered for $sess, called from
-# teardown_session. Never fails the caller: no state file, no `wsh`, or a
-# block that already auto-closed ("not found") are all silently fine — only
-# the specific id `open` recorded is ever targeted, never a pane scan.
+# Close the block remembered for $sess, called from teardown_session.
 block_id_close() {
   block_id_close_path "$(block_id_file "$1")"
 }
@@ -275,33 +367,4 @@ tab_describe() {
   count=$(sqlite3 "$ro" "SELECT count(*) FROM db_tab;" 2>/dev/null)
   [ -n "$name" ] || return 1
   printf '%s|%s\n' "$name" "${count:-1}"
-}
-
-# Delete a Wave block by id (used by `stop` so killing the cockpit also removes
-# the visible block, not just the tmux session). `wsh` needs an RPC context: from
-# a non-Wave shell (the agent's tool shell) WAVETERM_* is unset and wsh errors
-# "no workspaces found", so we resolve the block's own tab + workspace from the
-# state DB (read-only) and pass them via env — mirroring how `open` runs `wsh run`.
-# Best-effort: silent no-op if wsh/sqlite3 is missing, the block is already gone,
-# or no context can be resolved (never blocks `stop`). Returns non-zero when the
-# block was NOT actually deleted, so callers can report an accurate status
-# instead of assuming success.
-wave_delete_block() {
-  local bid="$1" ro tab ws
-  [ -n "$bid" ] || return 1
-  # bid comes from a user-writable state file and is interpolated into a LIKE
-  # query below — reject anything that isn't a UUID-like hex/dash string before
-  # it ever reaches sqlite3.
-  case "$bid" in *[!0-9a-fA-F-]*) return 1 ;; esac
-  command -v wsh >/dev/null 2>&1 || return 1
-  ro=$(wave_db_ro) || ro=""
-  if [ -n "$ro" ]; then
-    tab=$(sqlite3 "$ro" "SELECT oid FROM db_tab WHERE data LIKE '%${bid//\'/}%' LIMIT 1;" 2>/dev/null)
-    [ -n "$tab" ] || tab=$(resolve_live_tab 2>/dev/null || true)
-    [ -n "$tab" ] && ws=$(sqlite3 "$ro" \
-      "SELECT oid FROM db_workspace WHERE data LIKE '%${tab//\'/}%' LIMIT 1;" 2>/dev/null)
-  fi
-  WAVETERM_TABID="${tab:-${WAVETERM_TABID:-}}" \
-  WAVETERM_WORKSPACEID="${ws:-${WAVETERM_WORKSPACEID:-}}" \
-    wsh deleteblock -b "$bid" >/dev/null 2>&1
 }

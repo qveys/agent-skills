@@ -239,6 +239,11 @@
 #                              re-attaches on Enter — instead of dying with the
 #                              attach and leaving a black, key-swallowing dead
 #                              terminal; tmux-only; rc 0/1
+#   selftest-block             open records its Wave block id; stop/gc close exactly
+#                              that block (verified gone from `wsh blocks list`),
+#                              already-closed is silent, a failed deleteblock warns
+#                              on stderr, unrecorded blocks are never touched; fake
+#                              wsh + throwaway state — no real Wave block; tmux-only
 #
 # Env: WSH_MUX=tmux (default)    mux backend; WSH_MUX=zellij is EXPERIMENTAL —
 #                                core loop only (start/send/read/wait-done/stop/
@@ -1078,13 +1083,13 @@ open)
     echo "wsh not found — can't auto-open a Wave block. Attach by hand:" >&2
     echo "  ${ATTACH}" >&2; exit 5; }
 
-  TAB=""
+  TAB=""; TAB_SRC=""
   if [ -n "$TAB_NAME" ]; then
     TAB_RC=0
     resolve_tab_by_name "$TAB_NAME" || TAB_RC=$?
     case "$TAB_RC" in
       0)
-        TAB="$TAB_BY_NAME_RESULT"
+        TAB="$TAB_BY_NAME_RESULT"; TAB_SRC="--tab"
         if [ "$(tab_count_candidates "$TAB_BY_NAME_ALL")" -gt 1 ]; then
           echo "⚠️  multiple tabs named '$TAB_NAME' in this workspace — using the first (pinned, then tab order): $(printf '%s' "$TAB_BY_NAME_ALL" | tr '\n' ' ')" >&2
         fi
@@ -1162,6 +1167,9 @@ MSG
     DESC=$(tab_describe "$TAB" 2>/dev/null || true)
     TNAME="${DESC%%|*}"; TCOUNT="${DESC##*|}"
     echo "opened Wave block ${NEWID} attached to '${SESS}' (on tab ${TNAME:-$TAB})"
+    VIA=$TAB_SRC
+    [ -n "$VIA" ] || VIA=$(head -1 "$(tab_via_file "$SESS")" 2>/dev/null || true)
+    echo "onglet utilisé : «${TNAME:-$TAB}» (déduit via ${VIA:-cache})"
     if [ -n "$TNAME" ] && [ "${TCOUNT:-1}" -gt 1 ] 2>/dev/null; then
       echo "👉 the cockpit is on tab «${TNAME}» — click that tab in Wave to see it (you may be on another tab)."
     fi
@@ -1338,6 +1346,9 @@ selftest-attach)
   ;;
 selftest-situate)
   cmd_selftest_situate
+  ;;
+selftest-block)
+  cmd_selftest_block
   ;;
 push)
   have_mux
@@ -1634,5 +1645,5 @@ release)
   fi
   ;;
 *)
-  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach|selftest-situate} [args]" >&2; exit 2 ;;
+  echo "usage: $0 {spawn|start|open|send|keys|read|output|push|pull|stop|release|current|doctor|gc|status|web|banner|step-run|remote-init|local-init|wait-done|selftest-docs|selftest-sep|selftest-live|selftest-gc|selftest-cache|selftest-oneshot-ssh|selftest-output|selftest-transfer|selftest-guard|selftest-claim|selftest-adopt|selftest-tab|selftest-wrapper|selftest-attach|selftest-situate|selftest-block} [args]" >&2; exit 2 ;;
 esac
