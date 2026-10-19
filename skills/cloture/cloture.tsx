@@ -61,7 +61,6 @@ export const register: Register = on => {
     try {
       const id = await $.session.id()
       const isFirst = !seen.has(id)
-      seen.add(id)
       if (!isFirst && !touched) return next(e)
       const all = (await $.session.messages()) as Msg[]
       if (!Array.isArray(all)) return next(e)
@@ -70,8 +69,10 @@ export const register: Register = on => {
         { model: 'haiku', system: SYSTEM, prompt: buildInput(all.slice(-40), tasks, touched), maxTokens: 200, timeoutMs: 20_000 },
         { signal: ctl.signal },
       )
+      if (r.isAnswered && !ctl.signal.aborted) seen.add(id) // « premier tour » consommé seulement après un 1er appel réussi
       const text = r.isAnswered ? compose(parseReply(r.text), tasks) : null
-      if (text && !ctl.signal.aborted) await update($, line, () => text)
+      // signal revérifié au moment de l'écriture : un turn.start/session.end survenu entre-temps l'emporte
+      if (text && !ctl.signal.aborted) await update($, line, cur => (ctl.signal.aborted ? cur : text))
     } catch {
       // échec : rien à afficher
     }
