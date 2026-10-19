@@ -71,14 +71,18 @@ jobs:
             git push -f origin "$branch"
           fi
 
-          if gh pr view "$branch" --json number >/dev/null 2>&1; then
-            gh pr edit "$branch" --add-label automated-sync
-            echo "PR already exists for $branch."
+          # REST via `gh api`: `gh pr view/edit/create` query the GraphQL
+          # projectCards field (Projects classic, removed) and fail.
+          num=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=${GITHUB_REPOSITORY_OWNER}:$branch" --jq '.[0].number // empty')
+          if [ -n "$num" ]; then
+            echo "PR #$num already exists for $branch."
           else
-            gh pr create \
-              --title "🔄 chore(sync): update upstream skills" \
-              --body $'Automated synchronization of upstream Agent Skills.\n\nPlease review the updated `vendor/` directories and `sources.lock.yaml` file.' \
-              --base "$GITHUB_REF_NAME" \
-              --head "$branch" \
-              --label automated-sync
+            num=$(gh api -X POST "repos/$GITHUB_REPOSITORY/pulls" \
+              -f title="🔄 chore(sync): update upstream skills" \
+              -f body=$'Automated synchronization of upstream Agent Skills.\n\nPlease review the updated `vendor/` directories and `sources.lock.yaml` file.' \
+              -f head="$branch" \
+              -f base="$GITHUB_REF_NAME" \
+              --jq .number)
           fi
+          # Label is pre-created in the repo (idempotent POST).
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$num/labels" -f 'labels[]=automated-sync' >/dev/null
