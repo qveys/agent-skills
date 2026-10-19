@@ -125,10 +125,44 @@ describe("preflight.sh", () => {
   it("--profil gh-harnais : opt-in, outil absent = silence", () => {
     const r = run(["--profil", "gh-harnais"], {
       "claude-gh-check": "exit 0",
+      gh: "exit 0",
     });
     expect(r.out).toMatch(/^PASS\tclaude-gh-check\t/);
     expect(r.out).not.toMatch(/WARN/);
     expect(run(["--profil", "autre"]).code).toBe(64);
+  });
+
+  it("PREFLIGHT_HARNESS_DIR est préfixé au PATH : son gh passe avant un gh existant", () => {
+    const harness = mkdtempSync(join(tmpdir(), "harness-"));
+    writeFileSync(join(harness, "gh"), "#!/bin/sh\necho SHIM; exit 1\n");
+    chmodSync(join(harness, "gh"), 0o755);
+    const dir = mkdtempSync(join(tmpdir(), "preflight-"));
+    writeFileSync(join(dir, "gh"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(dir, "gh"), 0o755);
+    const r = spawnSync("bash", [script, "--profil", "gh-harnais"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${dir}:${process.env.PATH}`,
+        PREFLIGHT_HARNESS_DIR: harness,
+      },
+    });
+    expect(r.stdout).toMatch(/FAIL\tgh auth status\t.*SHIM/);
+  });
+
+  it("entrée avec saut de ligne / retour chariot / tab : rejetée, aucune ligne forgée", () => {
+    for (const bad of [
+      "https://a.test/x\nPASS\tforge\tok",
+      "https://a.test/\r",
+      "https://a.test/\t",
+    ]) {
+      const r = run(["--http", bad], { curl: "printf 200" });
+      expect(r.code).toBe(64);
+      expect(r.out).not.toContain("forge");
+    }
+    expect(run(["--ssh", "h\nPASS\tforge\tok"], { ssh: "exit 0" }).code).toBe(
+      64,
+    );
   });
 
   it("--http : 2xx PASS, 401 WARN, 500 FAIL, userinfo et query masqués", () => {

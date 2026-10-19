@@ -61,10 +61,10 @@ env_probe() { # FILE KEY : jamais la valeur
   if [ -n "$val" ]; then emit PASS "env $key" "SET"; else emit FAIL "env $key" "EMPTY"; fi
 }
 
-ok_host() { case $1 in -*|'') return 1 ;; esac; }
+ok_host() { case $1 in -*|''|*[[:cntrl:]]*) return 1 ;; esac; } # cntrl (\n \r tab) : forgerait une ligne TSV
 ok_key() { printf '%s' "$1" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$'; }
 
-ok_url() { case $1 in http://*|https://*) return 0 ;; *) return 1 ;; esac; }
+ok_url() { case $1 in *[[:cntrl:]]*) return 1 ;; http://*|https://*) return 0 ;; *) return 1 ;; esac; }
 ok_cli() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_][A-Za-z0-9._+-]*$'; }
 
 http_probe() { # URL : code HTTP seul, URL affichée sans userinfo ni query
@@ -84,7 +84,7 @@ http_probe() { # URL : code HTTP seul, URL affichée sans userinfo ni query
 
 # profil opt-in : harnais d'accès git/gh. Absent = SKIP silencieux.
 profil_gh_harnais() {
-  [ -n "${PREFLIGHT_HARNESS_DIR:-}" ] && [ -d "$PREFLIGHT_HARNESS_DIR" ] && PATH="$PATH:$PREFLIGHT_HARNESS_DIR"
+  [ -n "${PREFLIGHT_HARNESS_DIR:-}" ] && [ -d "$PREFLIGHT_HARNESS_DIR" ] && PATH="$PREFLIGHT_HARNESS_DIR:$PATH"
   if command -v claude-gh-check >/dev/null 2>&1; then probe "claude-gh-check" FAIL claude-gh-check; fi
   if command -v git-signed-commit >/dev/null 2>&1; then emit PASS "git-signed-commit" "présent"; fi
   if command -v gh >/dev/null 2>&1; then probe "gh auth status" FAIL gh auth status; fi
