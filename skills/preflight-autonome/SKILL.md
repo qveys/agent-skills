@@ -48,7 +48,7 @@ consigner, signaler après.
 ## 4. Règles permanentes
 Avant de rédiger un brief de sous-agent, relire CLAUDE.md global, la mémoire et les
 règles du dépôt. Si un harnais d'accès existe (ex. shims git/gh), l'imposer dans
-chaque brief : un sous-agent n'hérite pas du contexte.
+chaque brief : un sous-agent hérite du CLAUDE.md mais pas de la conversation : y recopier les règles utiles au contrat de la tâche, dont le harnais d'accès.
 
 ## 5. Lancement
 - Proposer à l'utilisateur la condition `/goal` : objectif = vider la TODO, condition vérifiable
