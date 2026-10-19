@@ -12,6 +12,12 @@ export interface UpstreamInfo {
   sha: string;
 }
 
+/** Membre d'archive à extraire : "." ou "" = racine du dépôt. */
+export function archiveMemberPath(rootDir: string, sourcePath: string): string {
+  const rel = sourcePath.replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+  return rel === "" || rel === "." ? rootDir : `${rootDir}/${rel}`;
+}
+
 export async function getLatestCommit(
   repo: string,
   ref: string,
@@ -85,7 +91,7 @@ export async function downloadAndExtract(
       throw new Error("Could not determine root directory from tarball");
     }
 
-    const exactPathToExtract = `${rootDir}/${sourcePath}`;
+    const exactPathToExtract = archiveMemberPath(rootDir, sourcePath);
 
     // Extract only the specific path
     await execFileAsync("tar", [

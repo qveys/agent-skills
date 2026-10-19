@@ -26,6 +26,12 @@
       "strict": false
     },
     {
+      "name": "vps-dokploy",
+      "source": "./skills/vps-dokploy",
+      "description": "Operate the vps-dokploy production server: Dokploy compose apps, file mounts, deploy webhooks, and the Housekeeper stack",
+      "strict": false
+    },
+    {
       "name": "chantier-relais",
       "source": "./skills/chantier-relais",
       "description": "Découper un plan ou un gros projet en étapes exécutables par petites sessions",
@@ -44,9 +50,21 @@
       "strict": false
     },
     {
+      "name": "tailscale-vps",
+      "source": "./skills/tailscale-vps",
+      "description": "Accès aux VPS via tailscale ssh (jamais ssh direct), méthode cockpit wsh",
+      "strict": false
+    },
+    {
       "name": "preflight-autonome",
       "source": "./skills/preflight-autonome",
       "description": "Preflight d'accès avant autonomie (sondes lecture seule, tableau PRÊT/CONTOURNABLE/HUMAIN)",
+      "strict": false
+    },
+    {
+      "name": "orchestration-regles-locales",
+      "source": "./skills/orchestration-regles-locales",
+      "description": "Règles locales d'orchestration Orca (choix des agents, exclusions, nettoyage, retry, harnais GitHub)",
       "strict": false
     },
     {
