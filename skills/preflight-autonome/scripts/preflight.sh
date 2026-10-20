@@ -90,6 +90,12 @@ profil_gh_harnais() {
   if command -v gh >/dev/null 2>&1; then probe "gh auth status" FAIL gh auth status; fi
 }
 
+# garde unique : aucun argument ne porte de caractère de contrôle (\n \r tab ESC…) ;
+# message sans l'argument fautif (sinon l'ESC ressortirait). Vaut aussi pour la commande de --cmd.
+for arg in "$@"; do
+  case $arg in *[[:cntrl:]]*) echo "preflight.sh : argument avec caractère de contrôle refusé" >&2; exit 64 ;; esac
+done
+
 ssh_list=() tsh_list=() env_list=() cmd_list=() http_list=() cli_list=() GITREMOTE=0 PROFIL=
 while [ $# -gt 0 ]; do
   case $1 in

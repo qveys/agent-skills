@@ -294,4 +294,29 @@ describe("preflight.sh", () => {
     ]);
     expect(run(cmds.flat()).code).toBe(63);
   });
+
+  it("caractère de contrôle dans tout argument de valeur : code 64, argument non réaffiché", () => {
+    const esc = String.fromCharCode(27);
+    const nl = String.fromCharCode(10);
+    const f = join(mkdtempSync(join(tmpdir(), "ctl-")), ".env");
+    writeFileSync(f, "K=v\n");
+    const cases: string[][] = [
+      ["--cli", `ls${nl}zzz`],
+      ["--env", f, `A${nl}B`],
+      ["--env", `/no${esc}x`, "K"],
+      ["--cmd", `l${esc}[31m::true`],
+      ["--cmd", `l::true${nl}false`],
+      ["--ssh", `h${esc}`],
+      ["--tailscale-ssh", `h${esc}`],
+      ["--http", `https://a.test/${esc}`],
+      ["--profil", `gh-harnais${esc}`],
+    ];
+    for (const args of cases) {
+      const r = run(args, { ssh: "exit 0", tailscale: "exit 0" });
+      expect(r.code).toBe(64);
+      expect(r.out).toBe("");
+      const e = spawnSync("bash", [script, ...args], { encoding: "utf8" });
+      expect(e.stderr).not.toContain(esc);
+    }
+  });
 });

@@ -34,7 +34,7 @@ déploiement, pas de migration). Choisir la plus légère qui prouve l'accès :
 | Base de données | `--cmd 'db::psql "$DATABASE_URL" -c "select 1"'` (ou mysql, redis-cli ping…) |
 | CLI cloud | `--cli aws` puis `--cmd "id::aws sts get-caller-identity"` (gcloud, az…) |
 | Docker / k8s | `--cmd "k8s::kubectl auth can-i get pods"`, `docker info` |
-| ssh / VPN | `--ssh HOTE`, `--tailscale-ssh HOTE` (exemple de VPN/mesh avec ssh intégré ; pour un autre, `--cmd`) |
+| ssh / VPN | `--ssh HOTE` ; ssh à travers un VPN/mesh : ex. un client avec ssh intégré (option dédiée, voir l'aide du script), sinon `--cmd` |
 | Droits sudo | `--cmd 'sudo::sudo -n true'` |
 | Runner / CI | `--cmd "ci::gh run list -L1"` ou l'API du fournisseur |
 | Secrets / .env | `--env FICHIER CLE` (SET / EMPTY / ABSENT, jamais la valeur) |
