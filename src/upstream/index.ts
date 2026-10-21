@@ -18,16 +18,22 @@ export function archiveMemberPath(rootDir: string, sourcePath: string): string {
   return rel === "" || rel === "." ? rootDir : `${rootDir}/${rel}`;
 }
 
+/** En-têtes API GitHub ; jeton optionnel (60 req/h/IP sans). Jamais journalisé. */
+export function apiHeaders(): Record<string, string> {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  return {
+    "User-Agent": "qveys-agent-skills-cli",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export async function getLatestCommit(
   repo: string,
   ref: string,
 ): Promise<string> {
   const url = `https://api.github.com/repos/${repo}/commits/${ref}`;
   const response = await fetch(url, {
-    headers: {
-      "User-Agent": "qveys-agent-skills-cli",
-      Accept: "application/vnd.github.v3+json",
-    },
+    headers: { ...apiHeaders(), Accept: "application/vnd.github.v3+json" },
   });
 
   if (!response.ok) {
@@ -54,9 +60,7 @@ export async function downloadAndExtract(
     // 1. Download tarball
     const url = `https://api.github.com/repos/${repo}/tarball/${ref}`;
     const response = await fetch(url, {
-      headers: {
-        "User-Agent": "qveys-agent-skills-cli",
-      },
+      headers: apiHeaders(),
       redirect: "follow",
     });
 
