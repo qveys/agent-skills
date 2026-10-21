@@ -257,3 +257,12 @@ export function suiteLine(md: string): string | null {
   if (!items.length) return null
   return `Suite : ${items.slice(0, 3).join(' ; ')}${items.length > 3 ? ` (+${items.length - 3})` : ''}`.slice(0, 400)
 }
+
+/** Suite du handoff le plus récent qui contient un `## Next` non vide (now.md sans Next est ignoré) ; null sinon. */
+export function pickSuite(files: { t: number; md: string }[]): string | null {
+  for (const f of [...files].sort((a, b) => b.t - a.t)) {
+    const l = suiteLine(f.md)
+    if (l) return l
+  }
+  return null
+}
