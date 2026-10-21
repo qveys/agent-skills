@@ -5,6 +5,8 @@ import {
   compose,
   extractTasks,
   parseReply,
+  pickSuite,
+  suiteLine,
 } from "../skills/cloture/cloture-logic.js";
 
 describe("cloture", () => {
@@ -353,5 +355,25 @@ describe("cloture hooks", () => {
     } finally {
       process.off("unhandledRejection", onRej);
     }
+  });
+
+  it("lit la section ## Next du handoff", () => {
+    expect(suiteLine("## Now\nx\n## Next\n1. A\n2. B\n## Autre\n1. Z")).toBe(
+      "Suite : A ; B",
+    );
+    expect(suiteLine("## Next\n- A\n- B\n- C\n- D")).toBe(
+      "Suite : A ; B ; C (+1)",
+    );
+    expect(suiteLine("## Next\n\n## Autre\n1. Z")).toBeNull();
+    expect(suiteLine("rien")).toBeNull();
+  });
+
+  it("pickSuite : plus récent AVEC Next non vide", () => {
+    const now = { t: 2, md: "## Now\nx" };
+    const ho = { t: 1, md: "## Next\n1. A\n2. B" };
+    expect(pickSuite([ho, now])).toBe("Suite : A ; B");
+    expect(pickSuite([now])).toBeNull();
+    expect(pickSuite([{ t: 3, md: "## Next\n" }, now])).toBeNull();
+    expect(pickSuite([])).toBeNull();
   });
 });
