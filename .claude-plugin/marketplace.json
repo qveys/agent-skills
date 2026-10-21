@@ -292,7 +292,7 @@
     {
       "name": "cloture",
       "source": "./skills/cloture",
-      "description": "Mod : indicateur de clôture de session (une ligne de statut après chaque tour)",
+      "description": "Mod : indicateur de clôture de session (une ligne de transcript après chaque tour)",
       "strict": false
     },
     {
