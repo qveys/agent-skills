@@ -249,3 +249,11 @@ export function compose(r: Reply | null, tasks: Task[]): string | null {
   if (!main) return null
   return (r.wait ? `${main}\nen attente d'une action différée` : main).slice(0, 400)
 }
+
+/** Ligne « Suite : … » depuis la section `## Next` d'un handoff markdown ; null si absente ou vide. Affichage local seulement. */
+export function suiteLine(md: string): string | null {
+  const body = md.match(/^## Next[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m)?.[1] ?? ''
+  const items = body.split('\n').map(l => l.match(/^\s*(?:\d+[.)]|[-*])\s+(.+)/)?.[1]).filter(Boolean).map(l => clean(l as string, 80))
+  if (!items.length) return null
+  return `Suite : ${items.slice(0, 3).join(' ; ')}${items.length > 3 ? ` (+${items.length - 3})` : ''}`.slice(0, 400)
+}

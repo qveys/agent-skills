@@ -1,11 +1,14 @@
 import type { Register } from "claude-code";
 import type { Msg } from "./cloture-logic";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildInput,
   compose,
   extractTasks,
   isModifying,
   parseReply,
+  suiteLine,
 } from "./cloture-logic";
 
 const SYSTEM = `Tu estimes la clôture d'une session de travail d'un assistant de code, à partir de métadonnées chiffrées (JSON : tour, outils par catégorie, erreurs, git_reussi, taches par statut). Tu ne reçois aucun texte libre.
@@ -39,6 +42,20 @@ function dbg(
     $.ui.log(`tour ${n} : ${msg}`, { to: "debug" });
   } catch {
     // journalisation best-effort : ne jamais relancer (la tâche de fond est détachée)
+  }
+}
+
+// Dernier handoff du projet courant : fichier le plus récent de .remember/ ; toute erreur = pas de ligne.
+function suite(): string | null {
+  try {
+    const dir = join(process.cwd(), ".remember");
+    const f = readdirSync(dir)
+      .filter((n) => n.endsWith(".md"))
+      .map((n) => ({ p: join(dir, n), t: statSync(join(dir, n)).mtimeMs }))
+      .sort((a, b) => b.t - a.t)[0];
+    return f ? suiteLine(readFileSync(f.p, "utf8")) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -124,7 +141,9 @@ export const register: Register = (on) => {
       if (!r.isAnswered) return log(`modèle sans réponse (${r.reason})`);
       seen.add(id); // « premier tour » consommé seulement après un 1er appel réussi
       const reply = parseReply(r.text);
-      const text = compose(reply, tasks);
+      const main = compose(reply, tasks);
+      const next = main ? suite() : null;
+      const text = next ? `${main}\n${next}` : main;
       log(
         `réponse ${reply ? reply.state : "invalide"} -> ${text ? "ligne" : "silence"}`,
       );
