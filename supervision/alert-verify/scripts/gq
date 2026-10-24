@@ -1,0 +1,17 @@
+#!/bin/sh
+# Lecture Grafana (lecture seule) avec le jeton du profil Hermes courant. Secrets jamais affichés.
+# Usage : gq METHOD PATH [DATA]
+# Profil = basename de HERMES_HOME (/opt/data -> default, /opt/data/profiles/<nom> -> <nom>).
+# Fichier de références : gq.<profil>.env (références op://, aucune valeur). Pas de repli vers
+# un autre profil : chaque profil a son propre compte de service, donc sa propre trace d'audit.
+D=$(dirname "$0")
+case "${HERMES_HOME:-/opt/data}" in
+  */profiles/*) PROFILE=$(basename "$HERMES_HOME") ;;
+  *) PROFILE=default ;;
+esac
+ENV_FILE="$D/gq.${GQ_PROFILE:-$PROFILE}.env"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "gq: pas de jeton Grafana pour le profil '${GQ_PROFILE:-$PROFILE}' ($ENV_FILE absent)" >&2
+  exit 2
+fi
+exec op run --env-file="$ENV_FILE" -- sh "$D/gq.sh" "$@"
