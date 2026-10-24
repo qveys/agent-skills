@@ -2,11 +2,22 @@
 
 ## The meta-skill that builds and improves all your skills, including itself.
 
-This meta-skill has **logged over 1,600 observations across my 81 skills**, most of which were turned into skill improvements. The majority of my 81 skills were themselves created based on observations by the meta-skill.
+**Why "One Skill to Rule Them All"?** The slogan doesn't claim this is the best skill. It couldn't be: a meta-skill is useless without the skills it watches over. It describes what Task Observer does: keep an eye on how all your other skills are working and suggest improvements. You decide which changes are installed.
 
-The current version of task-observer also includes improvements from 69 different contributors, each credited as an author or co-author in the commit history, and its commits close 99 issues and pull requests. Without these contributions, the project wouldn't be half as good as it is today.
+This meta-skill has **logged over 1,900 observations across my 84 skills**, most of which were turned into skill improvements. The majority of my 84 skills were themselves created based on observations by the meta-skill.
+
+The current version of task-observer also includes improvements from over 100 contributors, each credited as an author or co-author in the commit history, and over 270 issues and pull requests have been closed. Without these contributions, the project wouldn't be half as good as it is today.
+
+**Want to support the project? It's not about money — read [how you can help](SUPPORT.md).**
 
 This meta-skill is a practical application of the [Augmented Expertise](https://www.rebelytics.com/augmented-expertise/) methodology, an AI framework for knowledge workers. However, users have reported successful integrations into their Hermes and Openclaw setups, so it works equally well with autonomous agents.
+
+## Quick install
+
+1. **Install it, by either route:**
+   - **From a terminal (Vercel's skills CLI, needs Node.js):** `npx skills add rebelytics/one-skill-to-rule-them-all --skill task-observer` — add `-g` to install it for all your projects. This is the most-used route: the skills.sh listing reports over 13,000 installs.
+   - **In the Claude apps (web, desktop, mobile, Cowork):** upload the `.skill` bundle from the latest release via Settings → Customize.
+2. **Activate it, whichever route you used:** add the activation instruction from `references/environments.md` to your CLAUDE.md (or your platform's equivalent), then check that it runs (see "Check that it actually runs" below). Installing alone is not enough, because description matching under-triggers.
 
 ## Why you should use task-observer
 
@@ -37,7 +48,17 @@ During each session, it produces a structured observation log: what it noticed, 
 
 Some observations reveal patterns that aren't specific to one skill. These get captured as **cross-cutting principles** in a separate log — and new skills are automatically checked against them whenever they're created or updated. The more you use the system, the higher the quality floor across your whole skill library.
 
-The observer doesn't modify your skills directly. It produces recommendations that you review. You stay in control of what changes and when.
+The observer doesn't modify your installed skills. In an interactive review you approve each change; a scheduled review applies the observations that need no decision from you to staged copies only. Nothing goes live until you install the updated bundle, so you stay in control of what changes and when.
+
+## How this differs from Claude's built-in features
+
+Claude Code Projects can write project memory on its own: when you correct a thread and tell Claude to remember the correction, it goes into that project's memory and later threads start with it. Those entries are notes the agent keeps to, scoped to one project, and they are deleted with the project.
+
+Task Observer does a different job, and the two work best together. **Scope:** project memory records a fact or a pitfall for *this* project; Task Observer turns recurring friction into a change to a reusable skill, which then carries into every project that loads that skill. **Control:** project memory is written automatically and applied as an instruction; a Task Observer observation is a proposal, and a human review sits between the observation and the rule it becomes. Nothing changes a skill until you install the staged update.
+
+The practical link: a pitfall you find yourself storing in project memory more than once, or in more than one project, is a Task Observer signal — it has stopped being about the project and started being about the skill.
+
+Claude Code's built-in `/insights` command is the other close neighbour. It generates a snapshot report on your recent sessions and suggests CLAUDE.md rules for instructions you keep repeating. That is a useful snapshot, but it keeps no running log of observations, does not maintain your existing skills, and leaves applying its suggestions to you. Task Observer works continuously, ties each observation to the skill it concerns and turns it into a reviewed update. The two combine well: a rule `/insights` suggests that belongs to a skill rather than a project is a good candidate for an observation.
 
 ## Who it's for
 
@@ -55,19 +76,21 @@ One honest boundary: the formal observation log and review cycle pay off most as
 
 ## Installation
 
-The skill is a small bundle: `SKILL.md`, the files in `references/` that are loaded on demand (this keeps the always-loaded part lean), and two helper scripts in `scripts/`. Installing only SKILL.md works, but runs degraded and isn't recommended — the skill will tell you which files are missing.
+The skill is a small bundle: `SKILL.md`, the files in `references/` that are loaded on demand (this keeps the always-loaded part lean), and five helper scripts in `scripts/`. Installing only SKILL.md works, but runs degraded and isn't recommended — the skill will tell you which files are missing.
 
 **Get the files:** download the `.skill` bundle attached to the latest release, or download the repo as a ZIP (Code → Download ZIP) / clone it and keep `SKILL.md`, `references/` and `scripts/` together.
 
-**Claude (web interface, desktop app, mobile app, Cowork):** upload the `.skill` bundle via Settings → Customize (or put `SKILL.md`, `references/` and `scripts/` into one folder and zip that folder). The skill is then available in all chats and in Cowork tasks.
+**Claude (web interface, desktop app, mobile app, Cowork):** without the release bundle, put `SKILL.md`, `references/` and `scripts/` into one folder, zip that folder and upload it via Settings → Customize. The skill is then available in all chats and in Cowork tasks.
 
 **Claude Code:** place the folder at `.claude/skills/task-observer/` (project-level) or in your user-level skills directory, preserving the `references/` and `scripts/` subfolders.
 
 **Other systems:** keep the folder structure intact wherever your platform expects skills, and let your AI guide you (see "How it works" above).
 
-**From the command line (skills.sh):** `npx skills add rebelytics/one-skill-to-rule-them-all --skill task-observer`. This is the most-used install route — the skills.sh listing reports over 7,000 installs, and it carries independent security audits from Gen Agent Trust Hub, Socket and Snyk.
+**Vercel's skills CLI:** the skills.sh listing carries independent security audits from Gen Agent Trust Hub, Socket and Snyk.
 
-**Check that it actually runs.** Installing the files is not the same as activating the skill: description matching alone under-triggers, so add the activation instruction from `references/environments.md` to your CLAUDE.md (or your platform's equivalent) or install the session-start hook. Then verify in a *new* session — the session you install in cannot prove it — that the skill is invoked before the first tool call. The external tell if you skipped this: if `skill-observations/observation-log/` doesn't exist after a few sessions of real work, activation never happened.
+**Check that it actually runs.** Installing the files is not the same as activating the skill: description matching alone under-triggers, so add the activation instruction from `references/environments.md` to your CLAUDE.md (or your platform's equivalent) or install the session-start hook. Then verify in a *new* session — the session you install in cannot prove it — that the skill is invoked before the first tool call: open that session with ordinary work that does not mention the skill, because a request that names it invokes it by hand and proves nothing. The external tell if you skipped this: if `skill-observations/observation-log/` doesn't exist after a few sessions of real work, activation never happened. If it exists, read the last `session-start scan` line in `skill-observations/checkpoints.log`: that is the last session that ran the skill, so a date days old while you kept working means activation stopped, however many entries the first session wrote. Another skill's start-up text appearing in your sessions is not evidence that this one is active.
+
+**Upgrading.** The activation block lives outside the bundle, in your CLAUDE.md or its equivalent, so an upgrade does not move it: its first line carries the version of the template it came from, and the skill reports a block older than its own version with the paragraphs it lacks. Re-diff the block against `references/environments.md` on every upgrade.
 
 ## Claude environment notes
 
@@ -89,6 +112,7 @@ The skill is a small bundle: `SKILL.md`, the files in `references/` that are loa
 
 **Versions for other environments created by users:**
 - Codex version by AllstarGER: [https://github.com/AllstarGER/one-skill-to-rule-them-all](https://github.com/AllstarGER/one-skill-to-rule-them-all) (based on an older version of task-observer)
+- OpenCode version by tmogeid: [https://github.com/tmogeid/skill-prompt-evolution](https://github.com/tmogeid/skill-prompt-evolution) (based on an older version of task-observer, combined with [hqhq1025's Skill Optimizer](https://github.com/hqhq1025/skill-optimizer), with Spanish-first pattern detection)
 - Please get in touch if you've open-sourced an adaptation of the meta-skill for another system or environment. I'm happy to include it here.
 
 **Potentially compatible with caveats:**
@@ -114,9 +138,13 @@ This is an open-source project for the community. If you use it, I would love to
 - **Interesting use cases:** Have you come up with a creative way of using or improving Task Observer?
 - **Integrations with other systems:** One user told me that they connected task observer to Obsidian. Do you have a similar story?
 
+## Support the project
+
+There is no donation button: the project is free and community-driven, and the help it needs is reach. If you know someone who would benefit from Task Observer, tell them; if you have an audience, tell them; if you know someone who has one, tell them. Public recommendations go into the Recommended by and Listed in sections below. The whole story is in [SUPPORT.md](SUPPORT.md).
+
 ## License
 
-This work is licensed under [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+This work is licensed under [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/). The licence text is in [LICENSE](./LICENSE); the link above is the human-readable summary.
 
 You're free to use, adapt, and redistribute — even commercially — as long as you give appropriate credit: Link to the original repo (https://github.com/rebelytics/one-skill-to-rule-them-all/) and name the author (Eoghan Henn / rebelytics.com).
 
@@ -137,8 +165,9 @@ task-observer is indexed in these community lists and skill directories:
 - [CorpusIQ — Hermes skills catalog](https://www.corpusiq.io/docs/hermes/skills/catalog/task-observer-setup)
 - [SkillFoxx](https://skillfoxx.ru/en/skills/task-observer-one-skill-to-rule-them-all)
 - [Zread](https://zread.ai/rebelytics/one-skill-to-rule-them-all)
-
-It is also redistributed, unmodified and under CC BY 4.0, in [iamneilroberts/claude-skills](https://github.com/iamneilroberts/claude-skills).
+- [TypingMind](https://www.typingmind.com/skills/rebelytics-task-observer)
+- [karanb192 / awesome-claude-skills](https://github.com/karanb192/awesome-claude-skills)
+- [iamneilroberts / claude-skills](https://github.com/iamneilroberts/claude-skills)
 
 ## Recommended by
 
@@ -181,9 +210,14 @@ I would like to thank the following creators, platforms, publications, companies
 - Skillselion: [https://skillselion.com/guides/task-observer-skill-claude-code-guide](https://skillselion.com/guides/task-observer-skill-claude-code-guide)
 - Adele Newenham: [https://www.aiwithadele.com/guides/claude-code-plugins](https://www.aiwithadele.com/guides/claude-code-plugins)
 - Hysen Labs: [https://hysenlabs.com/en/projects/rebelytics-one-skill-to-rule-them-all](https://hysenlabs.com/en/projects/rebelytics-one-skill-to-rule-them-all)
-- Uday Sharma: [https://medium.com/@neuraldev/5-claude-code-plugins-that-take-your-setup-to-the-next-level-d5d61c2c5828](https://medium.com/@neuraldev/5-claude-code-plugins-that-take-your-setup-to-the-next-level-d5d61c2c5828)
+- Uday Sharma: [https://medium.com/@neuraldev/1-800-observations-81-skills-how-one-meta-skill-keeps-claude-getting-better-1da47180f894](https://medium.com/@neuraldev/1-800-observations-81-skills-how-one-meta-skill-keeps-claude-getting-better-1da47180f894)
 - SnowTiger: [https://www.toutiao.com/article/7687548501114225192/](https://www.toutiao.com/article/7687548501114225192/)
 - Divad: [https://divadsanders.medium.com/i-fixed-everything-wrong-with-claude-code-5-best-claude-plugins-c1af8d813ee1](https://divadsanders.medium.com/i-fixed-everything-wrong-with-claude-code-5-best-claude-plugins-c1af8d813ee1)
+- Abhijay Arora Vuyyuru (AI Action Letter): [https://abhijayvuyyuru.substack.com/p/dont-use-claude-code-without-these](https://abhijayvuyyuru.substack.com/p/dont-use-claude-code-without-these)
+- The Ai Impact: [https://www.theaiimpact.co/guides/claude-code-add-ons](https://www.theaiimpact.co/guides/claude-code-add-ons)
+- Bill Prin: [https://x.com/Bill_Prin/status/2103189962640552198](https://x.com/Bill_Prin/status/2103189962640552198)
+- Jake Austin: [https://www.snapchat.com/@itsjakeaustin3/spotlight/W7_EDlXWTBiXAEEniNoMPwAAYaGlrcndlbmJsAaDY8w3vAaDY8nNPAAAAAw](https://www.snapchat.com/@itsjakeaustin3/spotlight/W7_EDlXWTBiXAEEniNoMPwAAYaGlrcndlbmJsAaDY8w3vAaDY8nNPAAAAAw)
+- とも (tomo_ai_tech): [https://note.com/tomo_ai_tech/n/n0d5a87ebb8c0](https://note.com/tomo_ai_tech/n/n0d5a87ebb8c0)
 
 If I forgot to list your recommendation here, please let me know or submit it via a PR in the same format as the others.
 
@@ -193,4 +227,4 @@ If I forgot to list your recommendation here, please let me know or submit it vi
 
 ---
 
-**Created by [Eoghan Henn](https://rebelytics.com)**
+**Created and maintained by [Eoghan Henn](https://rebelytics.com), improved by its community of users**
