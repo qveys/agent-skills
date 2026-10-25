@@ -1,7 +1,7 @@
 ---
 name: backup-safety-audit
-description: "Use when deciding if a git-backed backup is safe to delete."
-version: 1.1.0
+description: "Use when creating or deleting a merge/sync backup. Clean up your own backup once the merge is proven."
+version: 1.2.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -17,9 +17,18 @@ Decide, with object-level evidence, whether a git-tracked backup or snapshot can
 
 Use when someone wants to reclaim space by removing an old backup, pre-sync snapshot, reconcile dump, or bundle directory, and the data is (or was) git-tracked with a known remote. Do not use for ordinary empty/rotating temp dirs with no git provenance.
 
+## Principe commun à tous les profils : nettoyer ses propres sauvegardes
+
+Une sauvegarde créée avant une fusion, une synchronisation ou une réconciliation est **temporaire** : elle n'existe que le temps de prouver que tout est dans le dépôt de référence. Le profil qui l'a créée la nettoie lui-même dès que la fusion est réussie, sans attendre une alerte de Vigie. Un backup oublié est un défaut du profil créateur.
+
+- **Créateur du backup, fusion réussie et poussée, audit à 0 blob unique** (procédure ci-dessous, `fetch` frais) : supprimer sans redemander, avec un script gardé (chemin, nom et hash du distant revérifiés avant, absence revérifiée après), puis consigner la suppression.
+- **Audit non concluant** (blob unique, fusion non poussée, `fetch` impossible, `modified.tar` ou `untracked.tar` non vides et absents du distant) : conserver, signaler avec les chiffres, ne rien supprimer.
+- **Un seul backup par opération** : réutiliser le dossier ou supprimer le précédent avant d'en créer un autre. Ne pas empiler un backup par tentative.
+- **Backup d'un autre profil ou d'origine inconnue** : ne pas le supprimer de sa propre initiative ; appliquer le Standing Gate ci-dessous.
+
 ## Standing Gate
 
-Never delete the backup before an explicit confirmation ("GO", "supprime", "je confirme"). An observation ("surely another useless backup") is a hypothesis, not an order — restate the verdict and the command, then wait. Report the deletion as done only after the process actually removed it and re-verified.
+S'applique à tout backup que le profil courant n'a pas créé lui-même, et au profil `vigie` (qui détecte et ne corrige jamais seul) : ne jamais supprimer avant une confirmation explicite ("GO", "supprime", "je confirme"). Une observation ("sûrement encore un backup inutile") est une hypothèse, pas un ordre : restituer le verdict et la commande, puis attendre. Annoncer la suppression comme faite seulement après qu'elle a eu lieu et été revérifiée.
 
 ## Procedure
 
