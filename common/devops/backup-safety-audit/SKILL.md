@@ -51,11 +51,15 @@ git -C <repo> fetch --no-tags origin
 git -C <repo> rev-parse refs/remotes/origin/main   # record this hash
 ```
 
+If the fetch fails (no credentials in this environment), pin the cached remote ref, state that caveat in the report, and treat the verdict as needing an explicit GO even for a backup you created: the autonomous-deletion principle requires a fresh fetch.
+
 Build the remote's object set once: `git rev-list --objects <remote-ref>` gives `oid path` lines; the first token of each is the object id. Everything reachable from the remote (all history, not just the tip tree) counts as "safe".
 
 ### 3. Enumerate what the backup actually holds, then compare object sets
 
 For every ref inside the backup — branches in the nested repo (`git -C <backup>/integration for-each-ref`), and every head in each bundle (`git bundle list-heads <bundle>`) — run `git rev-list --objects <tip>` and union the oids. Subtract the remote's object set. Classify what is left by type with `git cat-file -t`.
+
+To enumerate a bundle without touching the vault repo, import it into a throwaway bare repo in the scratch dir (`git init --bare`, then `git fetch <bundle> 'refs/heads/*:refs/heads/*'`), run `rev-list --objects` there, and delete it afterwards. Drive git from Python with an argv list and `-C <repo>` (`["git","-C",repo,"rev-list","--objects",ref]`); a single command string with spaces is treated as the executable name and fails.
 
 The decision rests on **blobs**, not commits or trees. See `references/git-object-comparison.md` for the exact recipes and a helper script.
 
@@ -95,6 +99,8 @@ The assertions fail closed: a wrong name, a moved remote, or a symlink all abort
 - **Judge by missing blobs, not missing commits.** A backup can hold historical working branches (split/reconcile/vps-wip) whose commits are not ancestors of the remote while their file content fully is. "All commits are ancestors" is the wrong test; "0 blobs absent from remote history" is the right one.
 - **Filter invalid oids before `cat-file`.** `rev-list --objects` can surface reflog artifacts or refs whose objects were pruned; `cat-file -t` on them raises. Wrap in try/except and count by type instead of crashing, or one bad oid aborts the whole audit.
 - **Bundle heads may name temporary refs** (e.g. `sync-upload-2026-10-19`) that were never pushed. Their absence from the remote is expected, not data loss — do not flag them as a gap.
+- **Compute loose-archive oids with `git hash-object --stdin` on the raw bytes.** A hand-built `sha1("blob N\0" + data)` easily gets the header wrong and reports every file as missing or present by accident.
+- **When a user asks to inspect further, go to the object level and stop at a verdict.** A report that ends on "cannot certify" with unexplained counts forces another round; classify every remaining object (commit, tree, invalid, blob) and say which classes carry content.
 - **Re-pin the remote hash right before deleting.** The remote can advance (or rewind) between audit and deletion; asserting the pinned hash is unchanged guarantees you delete against the safety claim you actually verified.
 - **A file present by name on the remote is not the same file.** Compare content oids. An archive entry can be an older version of a path the remote now holds at a newer blob; name-match would falsely certify it.
 - **Pre-sync snapshots recur.** A sync script that dumps a backup before each push will refill the space you just freed unless something purges old ones. If none does, flag it and offer to add a retention step rather than assuming they self-clean.
