@@ -361,7 +361,8 @@ block_listed() {  # $1 block id
   local list ro n
   if list=$(wsh blocks list --json 2>/dev/null); then
     case "$list" in *"\"$1\""*) echo listed ;; *) echo absent ;; esac
-  elif ro=$(wave_db_ro) && n=$(sqlite3 "$ro" "SELECT count(*) FROM db_block WHERE oid=$(sql_quote "$1");" 2>/dev/null); then
+  # Only trust the DB when wavepath resolves: wave_db_ro's HOME fallback may be stale.
+  elif [ -n "$(wsh wavepath data 2>/dev/null)" ] && ro=$(wave_db_ro) && n=$(sqlite3 "$ro" "SELECT count(*) FROM db_block WHERE oid=$(sql_quote "$1");" 2>/dev/null); then
     [ "$n" = 0 ] && echo absent || echo listed
   else echo unknown; fi
 }
