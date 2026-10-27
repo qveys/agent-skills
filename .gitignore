@@ -1,3 +1,4 @@
 _staging/
 *.pyc
 __pycache__/
+.worktrees/
