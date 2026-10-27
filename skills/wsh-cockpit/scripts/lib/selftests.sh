@@ -4262,7 +4262,7 @@ cmd_selftest_block() {
   BLK_FAKE=$(mktemp -d "${TMPDIR:-/tmp}/wsh-selftest-block.XXXXXX")
   BLK_PFX="cockpit-zz-selftest-block-$$"
   local failures=0 user_blk="11111111-1111-1111-1111-111111111111" s id err rc
-  trap 'for s in 1 2 3 4 5 6 7 8 9; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
+  trap 'for s in 1 2 3 4 5 6 7 8 9 10; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
 
   chk() { if [ "$2" -eq 0 ]; then echo "ok $1"; else echo "FAIL $1${3:+: $3}" >&2; failures=$((failures + 1)); fi; }
 
@@ -4275,7 +4275,7 @@ cmd_selftest_block() {
 #!/usr/bin/env bash
 d=$(dirname "$0")
 case "$1" in
-  wavepath) echo "$d/wave" ;;
+  wavepath) [ -e "$d/wavepath-fail" ] && exit 1; echo "$d/wave" ;;
   run) id=$(uuidgen | tr 'A-Z' 'a-z'); echo "$id" >>"$d/blocks"; echo "created block:$id" ;;
   blocks) [ -e "$d/list-fail" ] && { echo "Error: list" >&2; exit 1; }
           printf '['; sep=""; while read -r b; do printf '%s{"blockid": "%s"}' "$sep" "$b"; sep=","; done <"$d/blocks"; echo ']' ;;
@@ -4367,6 +4367,18 @@ FAKE
   err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
   if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/err" ]; then chk "6c db fallback: absent block is silent" 0
   else chk "6c db fallback: absent block is silent" 1 "rc=$rc $err"; fi
+
+  # 6d. wavepath, list AND deleteblock fail; the HOME fallback DB is stale (no such
+  #     block): must warn, not conclude "absent" from a stale DB.
+  mkdir -p "$BLK_FAKE/home/Library/Application Support/waveterm/db"
+  sqlite3 "$BLK_FAKE/home/Library/Application Support/waveterm/db/waveterm.db" "CREATE TABLE db_block(oid TEXT, data TEXT);"
+  tmux new-session -d -s "${BLK_PFX}-10" 2>/dev/null
+  marker "${BLK_PFX}-10"; touch "$BLK_FAKE/wavepath-fail" "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
+  rc=0; HOME="$BLK_FAKE/home" blk_run stop "${BLK_PFX}-10" || rc=$?
+  err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/wavepath-fail" "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
+  if case "$err" in *"can't confirm Wave block $id"*) true ;; *) false ;; esac; then
+    chk "6d stale fallback db not trusted: warns" 0
+  else chk "6d stale fallback db not trusted: warns" 1 "rc=$rc $err"; fi
 
   # 7. wsh absent from PATH: clean warning, no crash, session killed.
   marker "${BLK_PFX}-6"; id7=$id
