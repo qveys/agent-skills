@@ -4262,7 +4262,7 @@ cmd_selftest_block() {
   BLK_FAKE=$(mktemp -d "${TMPDIR:-/tmp}/wsh-selftest-block.XXXXXX")
   BLK_PFX="cockpit-zz-selftest-block-$$"
   local failures=0 user_blk="11111111-1111-1111-1111-111111111111" s id err rc
-  trap 'for s in 1 2 3 4 5 6 7 8; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
+  trap 'for s in 1 2 3 4 5 6 7 8 9; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
 
   chk() { if [ "$2" -eq 0 ]; then echo "ok $1"; else echo "FAIL $1${3:+: $3}" >&2; failures=$((failures + 1)); fi; }
 
@@ -4344,7 +4344,7 @@ FAKE
   rm -f "$BLK_FAKE/delete-fail"; marker "${BLK_PFX}-5"; touch "$BLK_FAKE/list-fail"
   rc=0; blk_run stop "${BLK_PFX}-5" || rc=$?
   err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/list-fail"
-  if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/err" ] && ! listed "$id" \
+  if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/err" ] && ! listed "$id" && grep -qx "block:$id" "$BLK_FAKE/deleted" \
      && ! tmux has-session -t "=${BLK_PFX}-5" 2>/dev/null; then
     chk "6 failed blocks list, deleteblock ok: closed, silent" 0
   else chk "6 failed blocks list, deleteblock ok: closed, silent" 1 "rc=$rc $err"; fi
@@ -4386,9 +4386,10 @@ FAKE
 
   # 8. malformed marker (non-hex): ignored, deleteblock never called.
   : >"$BLK_FAKE/deleted"
-  printf 'not-a-block-id!\n' >"$BLK_FAKE/state/block-${BLK_PFX}-7"
+  tmux new-session -d -s "${BLK_PFX}-9" 2>/dev/null   # live session (-7 was killed by 6b)
+  printf 'not-a-block-id!\n' >"$BLK_FAKE/state/block-${BLK_PFX}-9"
   echo 'not-a-block-id!' >>"$BLK_FAKE/blocks"   # listed: an unguarded close would call deleteblock
-  rc=0; blk_run stop "${BLK_PFX}-7" || rc=$?
+  rc=0; blk_run stop "${BLK_PFX}-9" || rc=$?
   if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/deleted" ] && [ ! -s "$BLK_FAKE/err" ]; then chk "8 malformed marker ignored" 0
   else chk "8 malformed marker ignored" 1 "rc=$rc deleted=$(cat "$BLK_FAKE/deleted") $(cat "$BLK_FAKE/err")"; fi
 

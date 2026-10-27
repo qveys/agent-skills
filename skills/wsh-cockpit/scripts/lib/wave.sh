@@ -351,7 +351,7 @@ block_id_close_path() {  # $1 marker path (block-<slug>)
     esac
     [ "$i" -lt 6 ] && sleep 0.5
   done
-  echo "wsh-cockpit: failed to close Wave block $id (still in \`wsh blocks list\`) — run: wsh deleteblock -b block:$id" >&2
+  echo "wsh-cockpit: failed to close Wave block $id (still listed — \`wsh blocks list\` or state DB) — run: wsh deleteblock -b block:$id" >&2
   return 1
 }
 
@@ -361,7 +361,7 @@ block_listed() {  # $1 block id
   local list ro n
   if list=$(wsh blocks list --json 2>/dev/null); then
     case "$list" in *"\"$1\""*) echo listed ;; *) echo absent ;; esac
-  elif ro=$(wave_db_ro) && n=$(sqlite3 "$ro" "SELECT count(*) FROM db_block WHERE oid='${1//\'/}';" 2>/dev/null); then
+  elif ro=$(wave_db_ro) && n=$(sqlite3 "$ro" "SELECT count(*) FROM db_block WHERE oid=$(sql_quote "$1");" 2>/dev/null); then
     [ "$n" = 0 ] && echo absent || echo listed
   else echo unknown; fi
 }
