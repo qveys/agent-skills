@@ -69,6 +69,19 @@ Un **service account exige `--vault`** sur toute lecture d'item : sans lui, `op 
 sur « a vault query must be provided ». Tester une permission d'écriture avant de planifier une
 création d'item — voir `references/op-cli-gotchas.md`.
 
+### RÈGLE ABSOLUE : JAMAIS AFFICHER UN SECRET 1PASSWORD
+
+Toute valeur récupérée via `op item get --reveal`, `op read`, ou `op item get --fields <field> --reveal`
+**ne s'affiche jamais** — ni dans le chat, ni dans les logs, ni dans les fichiers de sortie, ni dans
+les captures d'écran terminales.
+
+- Comparer par égalité de chaînes et n'afficher que `True`/`False` et la longueur.
+- Ne jamais coller une valeur dans le chat : les messages de session sont persistés (`state.db`, transcripts).
+- Si un `curl`/`terminal` contient un secret résolu via 1Password, masquer la valeur dans la commande
+  (ex: `KEY=$(op ...)` puis `curl -H "Authorization: Bearer $KEY"`) et ne jamais `echo $KEY`.
+- Sortie terminale : rediriger vers fichier si le secret pourrait apparaître, puis lire le fichier
+  sans l'afficher (ex: `read_file` avec offset/limit pour ne pas voir le secret).
+
 ### 3. Mapper, dans le bon fichier
 
 Racine puis **chaque profil concerné**, un par un :

@@ -11,7 +11,7 @@ metadata:
 
 # Backup Safety Audit
 
-Decide, with object-level evidence, whether a git-tracked backup or snapshot can be deleted without losing content that is not already on the authoritative remote. The output is a verdict plus the exact deletion command — the deletion itself only runs after explicit human confirmation.
+Decide, with object-level evidence, whether a git-tracked backup or snapshot can be deleted without losing content that is not already on the authoritative remote. The output is a verdict plus the exact deletion command. The deletion runs after explicit human confirmation, except a backup this profile created itself once the audit is clean on a fresh fetch (see the common principle below).
 
 ## When to Use
 
@@ -103,6 +103,7 @@ The assertions fail closed: a wrong name, a moved remote, or a symlink all abort
 - **When a user asks to inspect further, go to the object level and stop at a verdict.** A report that ends on "cannot certify" with unexplained counts forces another round; classify every remaining object (commit, tree, invalid, blob) and say which classes carry content.
 - **Re-pin the remote hash right before deleting.** The remote can advance (or rewind) between audit and deletion; asserting the pinned hash is unchanged guarantees you delete against the safety claim you actually verified.
 - **A file present by name on the remote is not the same file.** Compare content oids. An archive entry can be an older version of a path the remote now holds at a newer blob; name-match would falsely certify it.
+- **A conditional confirmation binds the scope.** "Delete if it is only the old version / the obsolete report" authorizes deletion only when the audit shows exactly that: map each remaining blob or archive file to the condition, say which part is old/superseded, and delete only if all of it fits. Anything outside the stated condition goes back to the user.
 - **Pre-sync snapshots recur.** A sync script that dumps a backup before each push will refill the space you just freed unless something purges old ones. If none does, flag it and offer to add a retention step rather than assuming they self-clean.
 
 ## Report Format

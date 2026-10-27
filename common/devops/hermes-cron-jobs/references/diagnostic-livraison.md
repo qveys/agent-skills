@@ -13,7 +13,7 @@
 - `$HERMES_HOME/channel_directory.json` : chaque plateau/canal/enregistrement Telegram y apparaît avec son `thread_id` dans le champ `id` (format `<chat_id>:<thread_id>`). Utile pour retrouver le thread_id d'un topic/forun sans passer par un job de test.
 - `$HERMES_HOME/logs/agent.log` et `$HERMES_HOME/logs/errors.log` : lignes `cron.scheduler: Job '<job_id>': ...`. Les deux fichiers portent la même ligne pour un même incident.
   - `grep -n "<job_id>" $HERMES_HOME/logs/agent.log` puis `grep -rn "<message d'erreur>" $HERMES_HOME/logs/` pour compter les occurrences réelles.
-- `$HERMES_HOME/cron/` : `jobs.json` (définition des jobs), `executions.db` (historique), `output/` (sorties).
+- `$HERMES_HOME/cron/` : `jobs.json` (définition des jobs), `executions.db` (historique avec `delivery_outcome`), `output/<job_id>/` (prompt incluant la sortie du wrapper et réponse finale). Comparer ces trois niveaux sur le même run : condition du script, décision de l'agent, résultat de livraison. Une sortie `[SILENT]` est `suppressed` et peut laisser `last_status: ok` et `last_delivery_error: null` ; ne pas la diagnostiquer comme panne Telegram.
 - Verdict d'envoi réussi : `Job '<id>': delivered to <platform>:<chat_id> via live adapter thread=<t> message_id=<n>`.
 
 ## Deux voies de livraison
