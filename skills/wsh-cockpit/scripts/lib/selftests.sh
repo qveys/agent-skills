@@ -4262,7 +4262,7 @@ cmd_selftest_block() {
   BLK_FAKE=$(mktemp -d "${TMPDIR:-/tmp}/wsh-selftest-block.XXXXXX")
   BLK_PFX="cockpit-zz-selftest-block-$$"
   local failures=0 user_blk="11111111-1111-1111-1111-111111111111" s id err rc
-  trap 'for s in 1 2 3 4 5 6 7; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
+  trap 'for s in 1 2 3 4 5 6 7 8; do tmux kill-session -t "=${BLK_PFX}-$s" 2>/dev/null || true; done; rm -rf "$BLK_FAKE"' EXIT
 
   chk() { if [ "$2" -eq 0 ]; then echo "ok $1"; else echo "FAIL $1${3:+: $3}" >&2; failures=$((failures + 1)); fi; }
 
@@ -4338,14 +4338,35 @@ FAKE
   if listed "$user_blk" && ! grep -q "$user_blk" "$BLK_FAKE/deleted"; then chk "5 unrecorded block untouched" 0
   else chk "5 unrecorded block untouched" 1; fi
 
-  # 6. `wsh blocks list` fails: warns, no crash, session still killed, rc as in 3.
+  # 6. `wsh blocks list` fails (real case: "no workspaces found") but deleteblock
+  #    works: block closed, session killed, rc 0, NO warning. (Contract changed
+  #    from "warns can't confirm": deleteblock now runs before any list check.)
   rm -f "$BLK_FAKE/delete-fail"; marker "${BLK_PFX}-5"; touch "$BLK_FAKE/list-fail"
   rc=0; blk_run stop "${BLK_PFX}-5" || rc=$?
   err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/list-fail"
-  if [ "$rc" -eq 0 ] && ! tmux has-session -t "=${BLK_PFX}-5" 2>/dev/null \
-     && case "$err" in *"blocks list"*"failed"*) true ;; *) false ;; esac; then
-    chk "6 failed blocks list warns, session killed, rc unchanged" 0
-  else chk "6 failed blocks list warns, session killed, rc unchanged" 1 "rc=$rc $err"; fi
+  if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/err" ] && ! listed "$id" \
+     && ! tmux has-session -t "=${BLK_PFX}-5" 2>/dev/null; then
+    chk "6 failed blocks list, deleteblock ok: closed, silent" 0
+  else chk "6 failed blocks list, deleteblock ok: closed, silent" 1 "rc=$rc $err"; fi
+
+  # 6b. list AND deleteblock fail, no readable db_block: warns, session killed.
+  marker "${BLK_PFX}-7"; touch "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
+  rc=0; blk_run stop "${BLK_PFX}-7" || rc=$?
+  err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
+  if [ "$rc" -eq 0 ] && ! tmux has-session -t "=${BLK_PFX}-7" 2>/dev/null \
+     && case "$err" in *"can't confirm Wave block $id"*) true ;; *) false ;; esac; then
+    chk "6b list+deleteblock fail warns" 0
+  else chk "6b list+deleteblock fail warns" 1 "rc=$rc $err"; fi
+
+  # 6c. list + deleteblock fail but the DB has no such block: already closed, silent.
+  sqlite3 "$BLK_FAKE/wave/db/waveterm.db" "CREATE TABLE db_block(oid TEXT, data TEXT);"
+  tmux new-session -d -s "${BLK_PFX}-8" 2>/dev/null
+  marker "${BLK_PFX}-8"; grep -vx "$id" "$BLK_FAKE/blocks" >"$BLK_FAKE/b.tmp"; mv "$BLK_FAKE/b.tmp" "$BLK_FAKE/blocks"
+  touch "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
+  rc=0; blk_run stop "${BLK_PFX}-8" || rc=$?
+  err=$(cat "$BLK_FAKE/err"); rm -f "$BLK_FAKE/list-fail" "$BLK_FAKE/delete-fail"
+  if [ "$rc" -eq 0 ] && [ ! -s "$BLK_FAKE/err" ]; then chk "6c db fallback: absent block is silent" 0
+  else chk "6c db fallback: absent block is silent" 1 "rc=$rc $err"; fi
 
   # 7. wsh absent from PATH: clean warning, no crash, session killed.
   marker "${BLK_PFX}-6"; id7=$id

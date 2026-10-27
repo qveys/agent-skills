@@ -141,8 +141,9 @@ La session survit aux appels et au détachement (Ctrl-b d) — c'est ce qui en f
 un espace partagé. **`stop` (et `gc`) ferment le bloc Wave automatiquement** :
 `open` (donc aussi `spawn`, qui passe par lui) mémorise l'id du bloc qu'il vient
 de créer sous `~/.cache/wsh-cockpit/block-<session>` ; `teardown_session` supprime
-ce bloc-là et lui seul (`wsh deleteblock -b block:<id>`), puis vérifie via
-`wsh blocks list` qu'il a disparu. Déjà fermé : silencieux. Échec : avertissement
+ce bloc-là et lui seul (`wsh deleteblock -b block:<id>`, lancé en premier), puis
+vérifie qu'il a disparu via `wsh blocks list`, sinon la base d'état Wave (lecture
+seule), sinon le code retour de deleteblock. Déjà fermé : silencieux. Échec : avertissement
 `wsh-cockpit: … Wave block <id> …` sur stderr, session tuée quand même. Un bloc
 non enregistré (terminaux de l'utilisateur) n'est jamais touché.
 

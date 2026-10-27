@@ -322,9 +322,10 @@ block_id_store() {
 # (`block:<uuid>`): a BARE uuid makes wsh resolve it relative to
 # WAVETERM_BLOCKID, which the agent's shell does not have ("resolving blockid:
 # no WAVETERM_BLOCKID env var set") — the old silent failure that left the
-# "detached or ended" block on screen. A block already gone from
-# `wsh blocks list` (closed by the user) is success. Anything else that leaves
-# the block listed is reported on stderr and returns 1.
+# "detached or ended" block on screen. deleteblock runs first, then the block's
+# absence is checked (`wsh blocks list`, else the state DB; both unavailable →
+# deleteblock's rc decides). Absent (even if deleteblock failed: already closed
+# by the user) is success; anything else is reported on stderr and returns 1.
 block_id_close_path() {  # $1 marker path (block-<slug>)
   local bf="$1" id list i
   [ -f "$bf" ] || return 0
@@ -335,17 +336,34 @@ block_id_close_path() {  # $1 marker path (block-<slug>)
     echo "wsh-cockpit: wsh not found — Wave block $id left open, close it by hand" >&2
     return 1
   fi
+  # deleteblock FIRST: it works without a workspace, whereas `blocks list` can
+  # fail from the agent's shell ("no workspaces found") and must not gate it.
+  local drc=0 st
+  wsh deleteblock -b "block:$id" >/dev/null 2>&1 || drc=$?
   for i in 0 1 2 3 4 5 6; do
-    if ! list=$(wsh blocks list --json 2>/dev/null); then
-      echo "wsh-cockpit: \`wsh blocks list\` failed — can't confirm Wave block $id is closed" >&2
-      return 1
-    fi
-    case "$list" in *"\"$id\""*) ;; *) return 0 ;; esac
-    if [ "$i" -eq 0 ]; then wsh deleteblock -b "block:$id" >/dev/null 2>&1 || true
-    else sleep 0.5; fi
+    st=$(block_listed "$id")
+    case "$st" in
+      absent) return 0 ;;                       # gone (or closed by the user)
+      unknown)                                  # list AND db unavailable: trust rc
+        [ "$drc" -eq 0 ] && return 0
+        echo "wsh-cockpit: \`wsh deleteblock\` failed and \`wsh blocks list\` is unavailable — can't confirm Wave block $id is closed; run: wsh deleteblock -b block:$id" >&2
+        return 1 ;;
+    esac
+    [ "$i" -lt 6 ] && sleep 0.5
   done
   echo "wsh-cockpit: failed to close Wave block $id (still in \`wsh blocks list\`) — run: wsh deleteblock -b block:$id" >&2
   return 1
+}
+
+# Print listed|absent|unknown for a block id: `wsh blocks list` first, the
+# read-only state DB (db_block) when the list fails.
+block_listed() {  # $1 block id
+  local list ro n
+  if list=$(wsh blocks list --json 2>/dev/null); then
+    case "$list" in *"\"$1\""*) echo listed ;; *) echo absent ;; esac
+  elif ro=$(wave_db_ro) && n=$(sqlite3 "$ro" "SELECT count(*) FROM db_block WHERE oid='${1//\'/}';" 2>/dev/null); then
+    [ "$n" = 0 ] && echo absent || echo listed
+  else echo unknown; fi
 }
 
 # Close the block remembered for $sess, called from teardown_session.

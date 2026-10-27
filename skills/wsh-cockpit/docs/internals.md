@@ -320,10 +320,11 @@ jamais adoptées restent sous la clé `user-preopen-<n>`, les adoptées passent 
 
 `open`/`spawn` impriment `opened Wave block <block-id> ...` et mémorisent cet id
 sous `~/.cache/wsh-cockpit/block-<session>`. `teardown_session` — partagé par
-`stop`, `gc` et l'hygiène des marqueurs — le relit : absent de
-`wsh blocks list` → déjà fermé, silencieux ; sinon
-`wsh deleteblock -b block:<block-id>` puis re-vérification, avertissement
-stderr si le bloc reste listé.
+`stop`, `gc` et l'hygiène des marqueurs — le relit :
+`wsh deleteblock -b block:<block-id>` d'abord (indépendant de `blocks list`, qui
+peut échouer avec « no workspaces found »), puis vérification : `blocks list`,
+repli sur `db_block` (SQLite ro), sinon rc de deleteblock. Bloc absent →
+silencieux ; avertissement stderr s'il reste listé ou inconfirmable.
 
 Piège mesuré : passer l'id en oref `block:<uuid>`. Un uuid nu échoue hors d'un
 bloc Wave (`no WAVETERM_BLOCKID env var set`, le cas du shell de l'agent) — d'où
