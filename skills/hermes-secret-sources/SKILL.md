@@ -28,6 +28,8 @@ Credentials must move out of a Hermes `.env` into an external secret source, a m
 
 ## Règles permanentes
 
+0. **Un même fournisseur peut exister sous deux noms/variables.** Un provider peut être défini à la fois comme plugin `model-providers` (ex: `opencode-go`, env `OPENCODE_GO_API_KEY`) ET dans le catalogue `models_dev` affiché par le sélecteur (ex: `opencode`, env `OPENCODE_API_KEY`, endpoint différent). Mapper la variable attendue par **l'interface que l'utilisateur regarde** (le catalogue/la liste), pas seulement celle du plugin ; les deux pointent vers le même item 1Password. Diagnostic si « le fournisseur n'apparaît pas dans ma liste » : retrouver sa variable d'env dans le code/catalogue (`grep OPENCODE /opt/hermes/agent/models_dev.py` ou l'inspecter via le cache `/opt/data/models_dev_cache.json`), mapper cette variable, puis recharger la session (l'env des processus lancés AVANT le mapping est figé — un redémarrage du service/session est nécessaire pour voir le fournisseur).
+
 1. **`.env` porte les valeurs, `config.yaml` porte la configuration.** La commande d'un helper
    (`secrets.command.command`) va dans `config.yaml`, jamais dans `.env`. Seul le token
    d'amorçage de la source (`OP_SERVICE_ACCOUNT_TOKEN`, `BWS_ACCESS_TOKEN`) reste dans `.env` —

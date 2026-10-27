@@ -27,6 +27,8 @@ Répond à 3 questions : **A** la notification est-elle réelle, **B** est-elle 
 - Un profil = un compte de service + son propre `gq.<profil>.env` (audit Grafana distinct, révocation indépendante) ; ne pas réutiliser le jeton d'un autre profil.
 - Toute nouvelle prise d'accès : prouver le moindre privilège devant l'utilisateur (lecture `200`, tentatives d'écriture folders/dashboards/alert-rules → `403`) avant de s'en servir. Ne jamais appeler un endpoint qui écrit ou envoie (ex. test de contact point).
 
+Prérequis : `GRAFANA_URL` (URL de base de Grafana, sans slash final) exporté ou défini dans le fichier `gq.<profil>.env` avec les références `op://`.
+
 ```bash
 S=<clone agent-skills>/skills/alert-verify/scripts   # dépôt agent-skills cloné sur le serveur Hermes
 G="$S/gq"   # choisit gq.<profil>.env selon HERMES_HOME

@@ -157,7 +157,7 @@ Pour que les notifications cron arrivent en mode threadé (dans un sujet/topic T
 **Option A — Cible explicite par job** (privilégiée quand un job doit aller vers un topic précis) :
 
 ```yaml
-deliver: "telegram:1710700635:<thread_id>"
+deliver: "telegram:123456789:<thread_id>"
 ```
 
 `<thread_id>` est l'ID du message ancre du topic (le message qui a créé le sujet, ou un message du topic). Sans ce troisième champ, le message est livré dans le chat général, pas dans un thread.
@@ -173,7 +173,7 @@ Cette variable route tous les cron jobs vers le topic nommé. Une cible explicit
 
 **Pour trouver un thread_id :**
 
-1. Lire le channel directory de Hermes (`$HERMES_HOME/channel_directory.json`) : chaque topic/forum Telegram enregistré y apparaît avec son `thread_id` dans le champ `id` (format `<chat_id>:<thread_id>`). Exemple : `"id": "1710700635:17032"` → thread_id = 17032.
+1. Lire le channel directory de Hermes (`$HERMES_HOME/channel_directory.json`) : chaque topic/forum Telegram enregistré y apparaît avec son `thread_id` dans le champ `id` (format `<chat_id>:<thread_id>`). Exemple : `"id": "123456789:17032"` → thread_id = 17032.
 2. Si le topic n'est pas encore enregistré, envoyer un message test manuellement dans le topic souhaité via un job `no_agent` temporaire avec `deliver: "telegram:<chat_id>:<topic_id>"` (cf. règle de test ci-dessus) : le message arrive dans le topic et les logs de livraison (`gateway.log`) affichent `delivered to telegram:<chat> thread_id=<id> via live adapter`.
 3. Une fois le thread_id identifié, le passer dans le champ `deliver` du job.
 
