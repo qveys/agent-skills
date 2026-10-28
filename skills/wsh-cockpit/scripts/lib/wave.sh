@@ -71,6 +71,7 @@ wsh_env_fallback() {
 # --tab must fail cleanly here rather than silently resolve against it.
 wave_db_ro_strict() {
   local data_dir db
+  wsh_env_fallback
   command -v wsh >/dev/null 2>&1 || return 1
   data_dir=$(wsh wavepath data 2>/dev/null) || return 1
   [ -n "$data_dir" ] || return 1
@@ -347,6 +348,7 @@ block_id_close_path() {  # $1 marker path (block-<slug>)
   id=$(tr -d '[:space:]' <"$bf" 2>/dev/null || true)
   rm -f "$bf" 2>/dev/null || true
   case "$id" in ''|*[!0-9a-fA-F-]*) return 0 ;; esac
+  wsh_env_fallback
   if ! command -v wsh >/dev/null 2>&1; then
     echo "wsh-cockpit: wsh not found — Wave block $id left open, close it by hand" >&2
     return 1

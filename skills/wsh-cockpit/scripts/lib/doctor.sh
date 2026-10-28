@@ -76,6 +76,7 @@ cmd_doctor() {
   fi
 
   # 4. wsh present (needed for auto-open).
+  wsh_env_fallback
   if command -v wsh >/dev/null 2>&1; then
     doc_line ok "wsh" "présent ($(command -v wsh))"
   else
