@@ -13,6 +13,10 @@ This repository serves as the central, versioned source of all AI agent skills f
 - `skills/`: Contains proprietary or customized skills. You have full control over these.
 - `vendor/`: Contains unmodified copies of third-party skills. **NEVER manually modify files in `vendor/`.** Any changes should be done by duplicating the skill into `skills/` or submitting a PR upstream.
 
+## Hermes skills
+
+Skills for Hermes agents live under `skills/hermes/<category>/<skill>/`, so Hermes can load only that subtree (`skills.external_dirs`). See [`skills/hermes/README.md`](skills/hermes/README.md).
+
 ## How to add an upstream skill
 
 Add an entry to `sources.yaml`:
