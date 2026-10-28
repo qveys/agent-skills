@@ -30,7 +30,7 @@ Répond à 3 questions : **A** la notification est-elle réelle, **B** est-elle 
 Prérequis : `GRAFANA_URL` (URL de base de Grafana, sans slash final) exporté ou défini dans le fichier `gq.<profil>.env` avec les références `op://`.
 
 ```bash
-S=<clone agent-skills>/skills/alert-verify/scripts   # dépôt agent-skills cloné sur le serveur Hermes
+S=<clone agent-skills>/skills/hermes/supervision/alert-verify/scripts   # dépôt agent-skills cloné sur le serveur Hermes
 G="$S/gq"   # choisit gq.<profil>.env selon HERMES_HOME
 $G GET /api/user                      # identité
 $G GET '/api/prometheus/grafana/api/v1/alerts'   # états + activeAt
