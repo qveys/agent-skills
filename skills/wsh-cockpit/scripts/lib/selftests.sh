@@ -4386,7 +4386,8 @@ FAKE
     echo "skip 7 wsh absent (a real wsh sits on the base PATH)"
   else
     rc=0
-    env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    # HOME isolated: the wsh fallback would otherwise find the real Wave bin dir.
+    env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID HOME="$BLK_FAKE/home" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
       WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa \
       "$SCRIPT_DIR/wsh-live.sh" stop "${BLK_PFX}-6" >/dev/null 2>"$BLK_FAKE/err" || rc=$?
     err=$(cat "$BLK_FAKE/err")

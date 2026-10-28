@@ -48,6 +48,21 @@ sql_quote() {
   printf "'%s'" "$s"
 }
 
+# Make `wsh` usable from an agent running inside Wave. Two real causes of
+# "wsh not found": (1) Wave's bin dir is not in PATH; (2) the agent runs in
+# tmux, which does not pass WAVETERM_* to the process (wsh then fails with
+# "WAVETERM_JWT not found") although they sit in `tmux show-environment`.
+# Never prints the values (JWT). No-op outside Wave/tmux.
+wsh_env_fallback() {
+  local wbin="$HOME/Library/Application Support/waveterm/bin" l
+  command -v wsh >/dev/null 2>&1 || { [ -x "$wbin/wsh" ] && PATH="$wbin:$PATH"; }
+  [ -z "${WAVETERM_JWT:-}" ] && [ -n "${TMUX:-}" ] || return 0
+  while IFS= read -r l; do
+    case "$l" in WAVETERM_*=*) export "$l" ;; esac
+  done < <(tmux show-environment 2>/dev/null)
+  return 0
+}
+
 # Resolve the live Wave state DB via `wsh wavepath data` ONLY — deliberately
 # WITHOUT wave_db_ro's hardcoded ~/Library/Application Support/waveterm
 # fallback (spec v12 §4, point c: that fallback can be a divergent/older DB,
@@ -56,6 +71,7 @@ sql_quote() {
 # --tab must fail cleanly here rather than silently resolve against it.
 wave_db_ro_strict() {
   local data_dir db
+  wsh_env_fallback
   command -v wsh >/dev/null 2>&1 || return 1
   data_dir=$(wsh wavepath data 2>/dev/null) || return 1
   [ -n "$data_dir" ] || return 1
@@ -332,6 +348,7 @@ block_id_close_path() {  # $1 marker path (block-<slug>)
   id=$(tr -d '[:space:]' <"$bf" 2>/dev/null || true)
   rm -f "$bf" 2>/dev/null || true
   case "$id" in ''|*[!0-9a-fA-F-]*) return 0 ;; esac
+  wsh_env_fallback
   if ! command -v wsh >/dev/null 2>&1; then
     echo "wsh-cockpit: wsh not found — Wave block $id left open, close it by hand" >&2
     return 1

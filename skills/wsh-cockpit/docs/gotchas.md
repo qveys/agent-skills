@@ -196,3 +196,14 @@ Un texte d'environ 1 600 caractères envoyé par `tmux send-keys` dans un TUI
 Claude Code est arrivé tronqué (début perdu), pause de 2 s comprise. Au-delà de
 ~500 caractères, passer par un fichier et envoyer une phrase courte qui y
 renvoie. Mesures : `docs/tui-driving.md`.
+
+## `wsh` introuvable alors que l'agent est dans Wave (tmux)
+
+Symptôme : `open`/`spawn` affiche « wsh not found — can't auto-open a Wave block »,
+ou `wsh` répond « must be run inside a Wave-managed SSH session (WAVETERM_JWT not
+found) ». Causes : `wsh` vit dans `~/Library/Application Support/waveterm/bin`
+(hors PATH), et tmux ne transmet pas `WAVETERM_*` au processus (`env | grep
+WAVETERM` vide) alors qu'ils sont dans `tmux show-environment`. Remède :
+`wsh_env_fallback` (scripts/lib/wave.sh) ajoute le dossier au PATH et importe les
+`WAVETERM_*` de tmux, sans les afficher ; à la main, même chose avant d'appeler
+`wsh` directement. Ne jamais afficher ni logguer le JWT.

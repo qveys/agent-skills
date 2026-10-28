@@ -83,6 +83,7 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 - **`release` obligatoire pour une session `--keep`** (marqueur sticky) ; sinon `stop` normal, y compris adoptée sans `--keep`.
 - **Chaque sous-agent exporte son propre `WSH_COCKPIT_AGENT`** (jamais `user-preopen-*`/`released`) ; idem `WSH_COCKPIT_PREFIX` entre agents parallèles.
 - **Un nom de session est littéral**, jamais un préfixe abrégé.
+- **`wsh` introuvable depuis un agent dans Wave/tmux** : voir `docs/gotchas.md` (PATH + `WAVETERM_*` de `tmux show-environment`) ; jamais afficher le JWT.
 
 ## Piloter un TUI (Claude Code, REPL) — pas avec `send`
 
