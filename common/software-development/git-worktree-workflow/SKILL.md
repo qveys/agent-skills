@@ -26,6 +26,17 @@ history, including "just update this file in my repo".
 - Toute tâche qui édite des fichiers suivis, change l'état d'une branche ou touche l'historique git (y compris « juste mettre à jour ce fichier »).
 - Revue/merge d'un changement, purge de worktrees, push rejeté ou divergence, hooks pre-commit.
 
+## Workspace rule (Quentin, 29/10/2026 — stricte)
+
+In `/workspace`, every Git worktree lives in `/workspace/.worktrees/` — never at the
+workspace root, never anywhere else. Create with
+`git worktree add /workspace/.worktrees/<name> -b <branch>`, move with `git worktree move`
+(a bare `mv` leaves orphanned `gitdir` pointers), prune with `git worktree prune` from the
+canonical repo. The canonical repo stays at `/workspace/<repo>`. Hermes subagent trees
+(`<repo>/.worktrees/`) are product behaviour and stay where the code creates them; this rule
+covers manual/Kanban/review worktrees of the workspace. A rule card lives in
+`/workspace/.worktrees/README.md`.
+
 ## Core rules (always on)
 
 1. **Never edit, stage, or commit in the canonical checkout, whatever the size of the change.** A one-line status fix counts. The canonical stays clean because it is the only reference for the remote sync; a small direct commit there breaks that guarantee and cannot be reviewed as a branch. Create a worktree first.
