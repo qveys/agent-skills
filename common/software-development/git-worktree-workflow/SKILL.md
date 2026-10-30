@@ -223,6 +223,7 @@ govern them, and how to exercise worktree behaviour from a spawned session.
   target checkout too: Git runs the hook against that checkout, not a sibling worktree. Never
   install an older worktree copy over a newer active hook: reconcile first, test a known-bad staged
   change through a real `git commit` in an isolated repo, then verify installed bytes and mode.
+- **Un client de sync périodique peut avaler ton commit explicite.** Un service qui fait `git add -A` + commit toutes les N minutes (ici `scripts/sync-client.mjs` sur `/workspace/brain`, toutes les 5 min) ramasse tout ce qui est sale, y compris les fichiers d'instructions d'agents, et signe le tout d'un `chore(sync)` : le commit perd sa traçabilité et son message. Deux gestes : commiter et pousser **immédiatement** après l'édition, et exclure structurellement les chemins sensibles via l'option `excludePaths` du client (`{"excludePaths": [".agents"]}`). Un chemin exclu laisse les fichiers sales sans créer de commit vide, ce qui oblige à les commiter explicitement — vérifier par un dépôt jetable avant de l'appliquer au dépôt réel.
 - **A repo-owned sync helper is scoped to one repo and to one subtree.** Before running one (a
   script that fetches/merges the default branch and then commits only a named subdirectory), read
   its guard clauses: it may refuse unless the current branch matches a pattern (e.g. `agent/*`),
