@@ -11,7 +11,18 @@
       "source": {
         "source": "github",
         "repo": "rebelytics/one-skill-to-rule-them-all"
-      }
+      },
+      "description": "Observes agent work sessions and turns recurring friction, corrections and judgement calls into proposed skill improvements and new skill candidates, with a human review gate.",
+      "category": "productivity",
+      "keywords": [
+        "agent-skills",
+        "skill-improvement",
+        "meta-skill",
+        "skill-authoring",
+        "session-observation",
+        "human-in-the-loop",
+        "feedback-loop"
+      ]
     }
   ]
 }
