@@ -22,6 +22,18 @@ metadata:
 
 Dans cette installation, un job récurrent se crée avec le cron Hermes, jamais via crontab, systemd, launchd ou n8n, sauf demande explicite d'un autre planificateur.
 
+## Nomenclature obligatoire des jobs
+
+Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver).
+
+- `<profil>` = répertoire du profil (`$HERMES_HOME` quand c'est la racine = `default`), jamais un libellé inventé (`Éclaireur —`, `Vigie —` : non).
+- `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`.
+- Nouvelle tâche : d'abord chercher un slug existant, n'en créer un que si la nature du travail diffère vraiment.
+- Pas de chemin, d'URL, de chat_id ni de seuil dans le nom (ils vont dans le prompt, le script ou le body du job).
+- Deux jobs sur le même script mais deux canaux différents (ex. rappel texte Telegram + appel téléphonique Conduit) ne sont **pas** des doublons : le slug doit alors distinguer le canal (`daily-review-reminder` / `daily-review-appel-conduit`).
+
+Renommer : `HERMES_HOME=<dir du profil> hermes cron edit <job_id> --name "<profil> · <tâche>"` (le provider relit `jobs.json` à chaque tick, pas de restart nécessaire). Contrôle de conformité : lister tous les `jobs.json` et vérifier que chaque `name` commence par `<profil> · `.
+
 ## Procedure
 
 ### 1. Inventaire
