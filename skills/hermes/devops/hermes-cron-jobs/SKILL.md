@@ -24,7 +24,7 @@ Dans cette installation, un job récurrent se crée avec le cron Hermes, jamais 
 
 ## Nomenclature obligatoire des jobs
 
-Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver).
+Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver). La cadence à bannir est la fréquence ou l'heure (`quotidien 22h22`, `every 2m`, `dimanche 20h`) ; un slug qui nomme le rituel reste conforme : `daily-review-reminder` et `weekly-review-prep` désignent la daily et la weekly, pas leur horaire.
 
 - `<profil>` = répertoire du profil (`$HERMES_HOME` quand c'est la racine = `default`), jamais un libellé inventé (`Éclaireur —`, `Vigie —` : non).
 - `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`.
