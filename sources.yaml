@@ -49,6 +49,13 @@ sources:
     destination: vendor/github-awesome-copilot/agent-skill-stack
     enabled: true
 
+  - id: security-audit-cloudflare
+    repo: cloudflare/security-audit-skill
+    ref: main
+    path: skills/security-audit
+    destination: vendor/cloudflare-security-audit-skill/security-audit
+    enabled: true
+
   - id: ai-ready
     repo: johnpapa/ai-ready
     ref: main

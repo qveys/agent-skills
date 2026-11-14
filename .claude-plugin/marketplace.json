@@ -152,6 +152,12 @@
       "strict": false
     },
     {
+      "name": "security-audit",
+      "source": "./vendor/cloudflare-security-audit-skill/security-audit",
+      "description": "Security guidance and vulnerability review for codebases, APIs, services, CLI tools, libraries, and daemons",
+      "strict": false
+    },
+    {
       "name": "ask-matt",
       "source": "./vendor/mattpocock-skills/ask-matt",
       "description": "Ask which skill or flow fits your situation.",
@@ -292,7 +298,7 @@
     {
       "name": "cloture",
       "source": "./skills/cloture",
-      "description": "Mod : indicateur de clôture de session (une ligne de statut après chaque tour)",
+      "description": "Mod : indicateur de clôture de session (une ligne de transcript après chaque tour)",
       "strict": false
     },
     {

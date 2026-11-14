@@ -139,10 +139,9 @@ scripts/wsh-live.sh start cockpit --reuse   # only when continuing YOUR session
 
 La session survit aux appels et au détachement (Ctrl-b d) — c'est ce qui en fait
 un espace partagé. **`stop` (et `gc`) ferment le bloc Wave automatiquement** :
-`open` (donc aussi `spawn`, qui passe par lui) mémorise l'id du bloc qu'il vient
-de créer sous `~/.cache/wsh-cockpit/block-<session>` ; `teardown_session` supprime
-ce bloc-là et lui seul (`wsh deleteblock -b block:<id>`), puis vérifie via
-`wsh blocks list` qu'il a disparu. Déjà fermé : silencieux. Échec : avertissement
+`open` (donc `spawn`) mémorise l'id du bloc créé sous `~/.cache/wsh-cockpit/block-<session>` ; `teardown_session` supprime
+ce bloc seul (`wsh deleteblock -b block:<id>`, en premier), puis vérifie via
+`wsh blocks list`, sinon la base Wave (ro), sinon le rc. Déjà fermé : silencieux. Échec : avertissement
 `wsh-cockpit: … Wave block <id> …` sur stderr, session tuée quand même. Un bloc
 non enregistré (terminaux de l'utilisateur) n'est jamais touché.
 
