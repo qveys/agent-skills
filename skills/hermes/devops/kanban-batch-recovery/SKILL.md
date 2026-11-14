@@ -55,7 +55,7 @@ For each affected assignee profile, correct the shared cause before touching tas
 
 - set the intended `model.provider` and `model.default`;
 - keep `worktree: false` for scratch/non-git worker workspaces;
-- ensure every forced skill exists under `/opt/data/profiles/<profile>/skills/<skill>/SKILL.md` (or in a dir the profile lists in `skills.external_dirs`, e.g. a cloned `agent-skills` checkout), not only in the default root;
+- ensure every forced skill exists under `/opt/data/profiles/<profile>/skills/<skill>/SKILL.md` (or in a dir the profile lists in `skills.external_dirs`, e.g. `/opt/data/shared-skills/common`), not only in the default root;
 - for a zero-cost chain, set `auxiliary.free_only: true` so title/judge/auxiliary calls cannot take a paid fallback lane.
 
 ### 4. Smoke-test the exact worker path as a hard gate

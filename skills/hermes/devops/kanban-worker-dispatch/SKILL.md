@@ -27,7 +27,7 @@ Most "the card is stuck" reports are dispatch-configuration faults, not task fau
 ## Pre-flight rules (apply BEFORE creating a card)
 
 1. **The assignee must be an existing profile.** The dispatcher calls `profile_exists(assignee)`; a card whose assignee does not resolve is never spawned and never errors — it waits in `ready` forever. Verify the profile directory exists before assigning.
-2. **Forced skills must exist inside the assignee profile.** Profiles are isolated: a skill present in the default root (`/opt/data/skills`) is not inherited by `/opt/data/profiles/<profile>/skills`. Exception: skills of the shared directories declared in `skills.external_dirs` (e.g. a cloned `agent-skills` checkout) are visible to every profile that declares them — check the worker profile's `config.yaml` first. A card with `skills='["foo"]'` crashes immediately with `Error: Unknown skill(s): foo` until the skill directory is copied into that profile. Before batch relaunch, run a smoke test with the exact forced skills, e.g. `hermes -p <profile> --skills foo --skills bar chat -q 'Réponds exactement: OK' -Q`.
+2. **Forced skills must exist inside the assignee profile.** Profiles are isolated: a skill present in the default root (`/opt/data/skills`) is not inherited by `/opt/data/profiles/<profile>/skills`. Exception: skills of the shared directories declared in `skills.external_dirs` (`/opt/data/shared-skills/common`, `/opt/data/shared-skills/supervision`) are visible to every profile that declares them — check the worker profile's `config.yaml` first. A card with `skills='["foo"]'` crashes immediately with `Error: Unknown skill(s): foo` until the skill directory is copied into that profile. Before batch relaunch, run a smoke test with the exact forced skills, e.g. `hermes -p <profile> --skills foo --skills bar chat -q 'Réponds exactement: OK' -Q`.
 3. **The assignee profile must have `worktree: false`.** With `worktree: true` (present in some default configs), the spawned CLI tries to create a git worktree, fails outside a Git repository, prints `--worktree requires being inside a git repository` and exits **rc=0** — with no terminal kanban call, which the dispatcher counts as a protocol violation.
 4. **The task workspace must resolve inside the container that runs the dispatcher**, not inside your own. A path only valid in another container yields `spawn_failed` with `workspace: [Errno 13] Permission denied`. Prefer `workspace_kind: scratch` unless you are certain of the target namespace.
 5. **Paths in the card body must exist in the worker's container.** Workers run elsewhere; a card citing a path from your own container sends the worker hunting for files it cannot see. State paths in the worker's namespace and expose reference material on a volume both containers mount.
@@ -42,6 +42,23 @@ Most "the card is stuck" reports are dispatch-configuration faults, not task fau
 ## Auto-block and retry
 
 Two consecutive spawn failures auto-block the card. Neither `worktree: true` nor a wrong workspace path is a task defect — fix the configuration, then `kanban_unblock` to requeue. Unblocking is the supported retry; do not recreate the card and do not assign it to yourself.
+
+## Cartes retenues par le garde-fou (`blocker_auth`)
+
+Symptôme : `WARNING gateway.run: kanban dispatcher stuck: ready queue non-empty for N consecutive ticks but 0 workers spawned. Last tick held back: blocker_auth=***. Check profile health (venv, PATH, credentials) and \`hermes kanban list --status ready\``.
+
+- La phrase « Check profile health (venv, PATH, credentials) » est un **texte générique** de `gateway/kanban_watchers.py`, émis dès que la file `ready` n'est pas vide et que rien n'est parti. Ce n'est **pas** un diagnostic : il n'existe aucun contrôle de venv, de PATH ni de credentials derrière ce message.
+- La vraie raison est la clé `blocker_auth`, produite par `hermes_cli/kanban_db_dispatch.py` quand le `last_failure_error` **de la carte** matche `_RESPAWN_BLOCKER_RE` : `quota`, `rate-limit`, `429`, `403`, `auth*`, `unauthorized`, `forbidden`, `billing`, `subscription`, `access/permission denied`, `invalid api key`.
+- Intention assumée : une carte qui vient d'échouer sur quota ou authentification n'est pas relancée à l'aveugle. Le garde-fou fonctionne, il ne faut **pas** affaiblir le motif.
+- Diagnostic correct : lire l'erreur des cartes concernées plutôt que le message du watcher.
+
+```bash
+sqlite3 "$HERMES_KANBAN_HOME/kanban.db" \
+  "SELECT id, status, assignee, substr(last_failure_error,1,120) FROM tasks WHERE coalesce(last_failure_error,'')<>'' AND status IN ('ready','blocked');"
+```
+
+- Correctif : traiter la cause quota/auth **hors** du board (budget ou crédits du fournisseur, clé expirée), puis constater l'arrêt du garde-fou au tick suivant. Aucune modification de code n'est attendue.
+- Symptôme trompeur à ne pas confondre : une rafale de `-15` sur des jobs cron au même instant n'est pas un problème de worker mais un redémarrage de la passerelle (voir `hermes-cron-jobs`, pitfall sur les SIGTERM s6).
 
 ## Diagnostic order
 

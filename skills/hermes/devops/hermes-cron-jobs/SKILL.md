@@ -30,9 +30,8 @@ Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point mé
 - `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`.
 - Nouvelle tâche : d'abord chercher un slug existant, n'en créer un que si la nature du travail diffère vraiment.
 - Pas de chemin, d'URL, de chat_id ni de seuil dans le nom (ils vont dans le prompt, le script ou le body du job).
-- Deux jobs sur le même script mais deux canaux différents (ex. rappel texte Telegram + appel téléphonique Conduit) ne sont **pas** des doublons : le slug doit alors distinguer le canal (`daily-review-reminder` / `daily-review-appel-conduit`).
 
-Renommer : `HERMES_HOME=<dir du profil> hermes cron edit <job_id> --name "<profil> · <tâche>"` (le provider relit `jobs.json` à chaque tick, pas de restart nécessaire). Contrôle de conformité : lister tous les `jobs.json` et vérifier que chaque `name` commence par `<profil> · `.
+Renommer : `HERMES_HOME=<dir du profil> hermes cron edit <job_id> --name "<profil> · <tâche>"` (le provider relit `jobs.json` à chaque tick, pas de restart nécessaire). Contrôle de conformité : lister tous les `jobs.json` et vérifier que chaque `name` commence par `<profil> · `. Un `edit --schedule` suffit pour changer la fréquence d'un job existant sans le recréer ; revérifier la ligne `Schedule` par `hermes cron list` après coup.
 
 ## Procedure
 
@@ -106,7 +105,7 @@ Recettes et chemins exacts : `references/diagnostic-livraison.md`. Cas « le job
 ## Pitfalls
 
 - **`hermes cron remove` nettoie aussi `cron/output/<job_id>/`** du job supprimé : le répertoire d'historique disparaît avec le job, on ne peut pas le déplacer à la main après coup. S'il doit survivre à la suppression (migration de profil, archivage), le copier avant le `remove`.
-- **Recréation du conteneur = perte des scripts dans `$HERMES_HOME/scripts/`**. Le wrapper vit dans le dépôt mais le cron l'exécute depuis `$HERMES_HOME/scripts/`. Après recréation du conteneur, le dossier scripts est vidé. **Toujours recopier le wrapper après recréation** avant de recréer le job cron.
+- **Recréation du conteneur = perte des scripts dans `$HERMES_HOME/scripts/`**. Le wrapper vit dans le dépôt mais le cron l'exécute depuis `$HERMES_HOME/scripts/`. Après recréation du conteneur, le dossier scripts est vidé. **Toujours recopier le wrapper après recréation** avant de recréer le job cron. Scripts versionnés dans leurs skills : `worktree-audit.sh` → `common/devops/hermes-cron-jobs/scripts/` (à recopier dans `$HERMES_HOME/scripts/`).
 - **Changement de chemins de travail** : le conteneur peut être recréé avec des montages différents (ex: `/opt/data/workspace` → `/workspace` ; `ls` les deux avant de corriger — ils existent tous les deux sur cette instance). Le wrapper et le `workdir` du job dans `jobs.json` doivent être mis à jour. Vérifier `HERMES_HOME` et le chemin du repo après recréation.
 - **Serveur web à relancer après modification du code** : le serveur uvicorn tourne en persistant (`background=true, persist_on_release=true`). Après modification du code Python, le serveur doit être relancé (kill + redémarrage) pour prendre en compte les changements. Ne pas oublier de vérifier que le port répond (HTTP 200).
 - **Un `last_status: ok` n'exclut pas « l'utilisateur ne voit rien ».** Quand le job écrit dans un store (fichier SQLite, stdout) et qu'un service déployé à part (Docker/Dokploy, autre hôte) consomme un AUTRE store, le job réussit mais la plateforme reste vide. Un volume Docker nommé (`foo:/data`) est isolé du fichier hôte que le cron remplit — le job remplit un store que personne ne lit ; redémarrer le service ne change rien. Vérifier que le chemin de la base du wrapper (`workdir` / variable d'env de la base) et celui du service consommé pointent vers le même volume ; sinon corriger la cause (faire tourner le collecteur dans l'écosystème de déploiement, ou bind-mount), pas en relançant. Voir `references/deploiement-stockage.md`.
@@ -128,6 +127,17 @@ Recettes et chemins exacts : `references/diagnostic-livraison.md`. Cas « le job
 - **Plusieurs jobs en erreur avec la même signature = cause partagée, pas N pannes indépendantes.** Un `cd: <chemin>: No such file or directory` sur plusieurs wrappers signale un montage déplacé : corriger la cause une fois pour toute la classe (procédure dans `cron-script-recovery`), pas job par job.
 - **Le chemin codé en dur vit à deux endroits : le `cd` du wrapper et le `workdir` du job dans `jobs.json`.** Réparer les wrappers sans relire `jobs.json` laisse les jobs ancrés sur l'ancien chemin.
 - **Rafraîchir `last_status` après une correction de wrapper.** L'erreur enregistrée survit au fix et fait ré-alerter un watchdog dont l'empreinte inclut la clé `job-error:` — repasser le statut à `ok` et vider `last_error` une fois le wrapper vérifié à la main depuis le shell.
+- **Le même script de détection partagé par plusieurs jobs n'en fait pas des doublons.** Avant d'archiver un « doublon », comparer nom, profil, cadence, `deliver` et prompt : deux jobs peuvent exécuter le même script et diverger ensuite (rappel agent vs appel téléphonique à l'utilisateur). Seul un job redondant de bout en bout (même cible, même cadence, même livraison) se supprime — et `hermes cron remove` emporte aussi son historique de sortie.
+
+### Gate de réveil : un job agent qui ne paie que s'il y a du travail
+
+Un job `no_agent=false` récurrent (ex. `inbox-check` toutes les 2 h) consomme des tokens à chaque tick, même quand il n'y a rien à faire, et tombe en erreur `429` dès que la clé du profil est à court de quota alors que le dossier surveillé est vide. Fixer la cause : un **script de pré-run** dont la dernière ligne est un wake gate.
+
+- Le scheduler lit la dernière ligne non vide de stdout : le JSON `wakeAgent: false` → **aucun appel modèle**, run enregistré `ok` et silencieux ; toute autre sortie → l'agent est réveillé et reçoit cette sortie dans son prompt.
+- Sans travail, écrire exactement `{"wakeAgent": false}` ; avec du travail, lister les entrées **et terminer explicitement par `{"wakeAgent": true}`** pour qu'un aperçu de fichier ne soit jamais confondu avec le gate.
+- Prévoir un override de test (`INBOX_DIR="${INBOX_DIR:-/chemin/réel}"`) pour valider les deux branches sans toucher la vraie boîte.
+- Le gate protège aussi du `429` : profil à quota épuisé, un tick vide reste `ok` au lieu de faire grossir `failure_streak`.
+- Alternative équivalente pour une détection par empreinte : `monitor_script` (statut `no_change (agent run suppressed)`). Le gate reste préférable quand un fichier non traité doit être **re-signalé** à chaque tick : un monitor hashé le supprime silencieusement.
 
 ### Watchdog « alerte au changement d'état » (job de supervision)
 
@@ -169,7 +179,7 @@ Pour que les notifications cron arrivent en mode threadé (dans un sujet/topic T
 **Option A — Cible explicite par job** (privilégiée quand un job doit aller vers un topic précis) :
 
 ```yaml
-deliver: "telegram:123456789:<thread_id>"
+deliver: "telegram:1710700635:<thread_id>"
 ```
 
 `<thread_id>` est l'ID du message ancre du topic (le message qui a créé le sujet, ou un message du topic). Sans ce troisième champ, le message est livré dans le chat général, pas dans un thread.
@@ -185,7 +195,7 @@ Cette variable route tous les cron jobs vers le topic nommé. Une cible explicit
 
 **Pour trouver un thread_id :**
 
-1. Lire le channel directory de Hermes (`$HERMES_HOME/channel_directory.json`) : chaque topic/forum Telegram enregistré y apparaît avec son `thread_id` dans le champ `id` (format `<chat_id>:<thread_id>`). Exemple : `"id": "123456789:17032"` → thread_id = 17032.
+1. Lire le channel directory de Hermes (`$HERMES_HOME/channel_directory.json`) : chaque topic/forum Telegram enregistré y apparaît avec son `thread_id` dans le champ `id` (format `<chat_id>:<thread_id>`). Exemple : `"id": "1710700635:17032"` → thread_id = 17032.
 2. Si le topic n'est pas encore enregistré, envoyer un message test manuellement dans le topic souhaité via un job `no_agent` temporaire avec `deliver: "telegram:<chat_id>:<topic_id>"` (cf. règle de test ci-dessus) : le message arrive dans le topic et les logs de livraison (`gateway.log`) affichent `delivered to telegram:<chat> thread_id=<id> via live adapter`.
 3. Une fois le thread_id identifié, le passer dans le champ `deliver` du job.
 

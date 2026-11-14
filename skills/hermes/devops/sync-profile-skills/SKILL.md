@@ -1,15 +1,13 @@
 ---
 name: sync-profile-skills
 description: "Aligner une skill du profil sur sa source workspace."
-metadata:
-  opencode/autoinvoke: false
 ---
 
 # sync-profile-skills
 
 ## Rôle
 
-Dans le runtime Hermes, les skills du vault ne se dupliquent jamais : un **seul symlink de dossier** `<dossier partagé>/vault` pointe vers l'unique source du workspace (`/workspace/brain/.agents/skills`). Tous les profils le chargent par `skills.external_dirs` (dossier partagé, ex. clone du dépôt `agent-skills`). Plus de copie, plus de dérive possible. Pour qu'un profil ne voie pas toutes les skills du vault, on les masque dans sa `config.yaml` (`skills.disabled`), on ne multiplie pas les liens. Seules les skills propres au profil (catégories `apple`, `creative`, `research`…) restent des vrais répertoires.
+Dans le runtime Hermes, les skills du vault ne se dupliquent jamais : un **seul symlink de dossier** `/opt/data/shared-skills/common/vault` pointe vers l'unique source du workspace (`/workspace/brain/.agents/skills`). Tous les profils le chargent par `skills.external_dirs` (`/opt/data/shared-skills/common`). Plus de copie, plus de dérive possible. Pour qu'un profil ne voie pas toutes les skills du vault, on les masque dans sa `config.yaml` (`skills.disabled`), on ne multiplie pas les liens. Seules les skills propres au profil (catégories `apple`, `creative`, `research`…) restent des vrais répertoires.
 
 Déclencheurs : l'utilisateur signale qu'une procédure qu'il a déjà corrigée réapparaît, ou une skill du crew va être suivie pour une tâche à écriture.
 
@@ -20,7 +18,7 @@ Une copie en retard est plus dangereuse qu'une skill absente : l'agent applique 
 Quand le dépôt brain est accessible, ne pas comparer skill par skill à la main : `scripts/sync-profile-skills.sh` à la racine du workspace fait la passe complète.
 
 - `check` (mode par défaut) — compare récursivement chaque skill (`SKILL.md`, `references/`, `scripts/`, `templates/`), sortie 1 dès qu'un écart : rapporteur, aucune écriture, utilisable en contrôle.
-- `sync` — copie le workspace vers le profil pour ce qui a dérivé, puis revérifie ; sortie 1 seulement si une copie a échoué. Inactif quand le lien partagé `vault` est intact : rien n'est copié, une copie locale réelle est seulement signalée `COPIE-LOCALE`.
+- `sync` — copie le workspace vers le profil pour ce qui a dérivé, puis revérifie ; sortie 1 seulement si une copie a échoué. Inactif quand le lien partagé `common/vault` est intact : rien n'est copié, une copie locale réelle est seulement signalée `COPIE-LOCALE`.
 - Le dossier du profil est détecté (`~/.hermes/profiles/compagnon/skills`, puis `/opt/data/profiles/compagnon/skills`) ; le forcer par `SKILLS_DST` ou par un second argument pour travailler sur une copie jetable.
 - Ce qui n'existe que dans le profil est signalé (`RESIDU`, `PROFIL-SEULE`), jamais supprimé ni compté comme une dérive.
 
@@ -45,7 +43,7 @@ diff /workspace/brain/.agents/skills/<nom>/SKILL.md \
 
 ## Resynchroniser
 
-Seulement quand le lien partagé `vault` est absent ou cassé. Lien intact : réparer ou retirer la copie locale au lieu de la resynchroniser.
+Seulement quand le lien partagé `common/vault` est absent ou cassé. Lien intact : réparer ou retirer la copie locale au lieu de la resynchroniser.
 
 ```bash
 cp /workspace/brain/.agents/skills/<nom>/SKILL.md \
@@ -71,7 +69,7 @@ Un dossier réel (non lien) dont le nom existe dans `.agents/skills` est une cop
 1. Inventorier : pour chaque profil et pour le profil `default` (`/opt/data/skills`), lister les dossiers réels homonymes d'une skill du vault, hachés par `md5sum` face à la source.
 2. Avant de remplacer, asserter que le dossier ne contient que `SKILL.md` et que son empreinte est la copie ancienne connue (identique d'un profil à l'autre) : rien d'annexe ni d'unique à perdre. Sinon, regarder le `diff` d'abord.
 3. Archiver l'ancienne copie en `.tar.gz` dans le scratch, `rmtree`, puis `os.symlink(source, chemin)` ; revérifier que l'empreinte lue à travers le lien égale celle de la source.
-4. Un seul lien pour tout le dossier : `<dossier partagé>/vault -> /workspace/brain/.agents/skills` (le chargeur suit les liens : `os.walk(followlinks=True)`). Ne pas créer un lien par skill. Puis retirer des profils (dont la config liste le dossier partagé dans `skills.external_dirs`) leurs liens individuels redondants. Un doublon local + externe est masqué proprement (priorité : local avant dossiers externes), donc l'ordre des étapes ne casse rien.
+4. Un seul lien pour tout le dossier : `/opt/data/shared-skills/common/vault -> /workspace/brain/.agents/skills` (le chargeur suit les liens : `os.walk(followlinks=True)`). Ne pas créer un lien par skill. Puis retirer des profils (dont la config contient `shared-skills/common` dans `skills.external_dirs`) leurs liens individuels redondants. Un doublon local + externe est masqué proprement (priorité : local avant dossiers externes), donc l'ordre des étapes ne casse rien.
 5. Limiter ce que voit chaque profil avec `skills.disabled` dans sa `config.yaml` (liste de noms de skills). Règle de départ : un profil garde les skills du vault qu'il avait avant, les autres sont masquées. Sauvegarder la config avant de la modifier, valider le YAML (`ruamel.yaml`, le venv Hermes n'a pas `yaml`), puis relire la liste par `agent.skill_utils.get_disabled_skill_names` avec `HERMES_HOME` du profil.
 6. Contrôle continu : le contrôle `check_skills_drift` de Vigie signale copies locales et liens cassés par profil.
 
@@ -82,7 +80,7 @@ Un dossier réel (non lien) dont le nom existe dans `.agents/skills` est une cop
 - Comparer les empreintes au début d'une tâche gouvernée par une skill du crew, pas à la fin : une fois les questions posées et les notes écrites, la resynchronisation n'efface pas ce qui a déjà été produit de travers.
 - Une skill que le runtime dit manquante alors que son entrée existe dans le dossier du profil est un symlink à cible morte, pas une skill absente : la racine du workspace a bougé. Diagnostiquer par test d'existence du lien, repointer sur la racine courante, relancer `check`, et seulement ensuite reprendre la tâche : lire le `SKILL.md` à la main depuis la source sort la session du contrôle du sync et fait patcher une copie que personne ne resynchronise.
 - Avec le lien partagé intact, le script ne recopie plus rien : une skill absente du dossier du profil est servie par le lien, et une copie locale réelle est signalée `COPIE-LOCALE` (à retirer, jamais à resynchroniser par `cp`, ce qui recréerait la duplication). Le mode `sync` n'a plus d'effet sur elles.
-- Une skill propre à un profil et dupliquée dans un autre profil (sans source dans le vault) diverge de la même façon : la déplacer dans le dépôt partagé (`skills/` du dépôt `agent-skills`) plutôt que la copier.
+- Une skill propre à un profil et dupliquée dans un autre profil (sans source dans le vault) diverge de la même façon : la déplacer dans `/opt/data/shared-skills/common/` plutôt que la copier.
 - Le contrôle de dérive de Vigie et le script ne regardent que le premier niveau de `<profil>/skills/` : une copie rangée dans une catégorie locale (`<profil>/skills/<catégorie>/<skill>`) y échappe et masque la skill partagée du même nom. L'inventorier à la main avec `find <profil>/skills -mindepth 2 -maxdepth 3 -name SKILL.md` avant de déclarer le profil propre.
 - Ne jamais supprimer une skill du profil pour « nettoyer » : sans elle, la classe de tâche perd son mode d'emploi. Une copie locale d'une skill qui a un équivalent partagé se remplace par ce partage, elle ne se supprime pas à l'aveugle.
 - Contrôler tout le dossier de la skill (`references/`, `scripts/`, `templates/`), pas seulement son `SKILL.md` : la comparaison récursive est le seul moyen de voir une référence ou un script resté en arrière.

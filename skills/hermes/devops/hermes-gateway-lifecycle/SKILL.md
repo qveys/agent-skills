@@ -148,7 +148,7 @@ $HERMES_HOME/hooks/<nom>/
    démarrage) et non prouvée. Ne jamais présenter un envoi manuel comme un test end-to-end.
 
 Dernière étape de tout rapport : dire ce qui est PROUVÉ, ce qui est vérifié en lecture, et la
-commande exacte qui reste à exécuter — L'utilisateur attend un correctif appliqué et testé, pas un plan.
+commande exacte qui reste à exécuter — Quentin attend un correctif appliqué et testé, pas un plan.
 
 ## Références
 

@@ -159,6 +159,37 @@ for label, extra in (('sans token',{}),('avec token',{'OP_SERVICE_ACCOUNT_TOKEN'
 Si le cas « sans token » échoue et « avec token » passe, le token d'amorçage est filtré en amont :
 voir `references/source-scoping-bug.md`.
 
+## Diagnostic : 302 sur un provider derrière Cloudflare Access
+
+Un `HTTP 302 Found` sur un endpoint LLM privé (`/v1/models` renvoie du HTML
+Cloudflare) n'est ni un quota ni un bug de modèle : c'est **Cloudflare Access** qui
+redirige vers `*.cloudflareaccess.com/cdn-cgi/access/login`. Cause quasi systématique
+en multi-profils : un profil référence un **item 1Password périmé** pour
+`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` (token de service révoqué).
+
+Diagnostic sans fuite : comparer les UUID d'item entre profils
+(`grep -n CF_ACCESS /opt/data/profiles/*/config.yaml`), puis tester chaque couple :
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H @/tmp/h \
+  -H "Authorization: Bearer $KEY" https://<hote>/v1/models   # 302 = token refusé, 200 = bon
+```
+
+Aligner le profil fautif sur l'UUID utilisé par les profils qui répondent, avec la route
+sanctionnée — l'outil de patch et l'écriture directe de `config.yaml` sont **refusés aux
+agents** (« Agent cannot modify security-sensitive configuration ») :
+
+```bash
+hermes -p <profil> config set secrets.onepassword.env.CF_ACCESS_CLIENT_ID 'op://Hermes/<UUID>/username'
+hermes -p <profil> config set secrets.onepassword.env.CF_ACCESS_CLIENT_SECRET 'op://Hermes/<UUID>/credential'
+```
+
+Séparer ensuite les causes : un 302 corrigé peut laisser apparaître un **429**
+(quota par clé, pas par modèle) — tester `mid`, `free` et `fast` avant de conclure qu'un
+modèle précis est en cause, et ne pas basculer de provider sans avoir vérifié qu'une
+complétion réelle passe (une clé qui liste ses modèles en 200 peut renvoyer
+`403 AccessDenied.Unpurchased` sur chaque appel).
+
 ## Références
 
 - `references/git-credentials-1password.md` — helper Git qui lit un identifiant depuis 1Password,
