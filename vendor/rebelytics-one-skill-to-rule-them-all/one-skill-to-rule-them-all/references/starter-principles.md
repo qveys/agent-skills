@@ -1,6 +1,8 @@
 # Starter Cross-Cutting Principles (optional seed)
 
-Starter set version: 2
+Load triggers: the starter-set reconciliation is due (marker absent or older than this file's set)
+
+Starter set version: 4
 
 This file is NOT the adopter's principles file. It is an optional seed:
 a curated set of generic methodology principles, accumulated over a long
@@ -29,13 +31,62 @@ materially changed, or existing installs never see the change.
 
 **The offer is one line, made once:** "the bundle ships N starter
 principles; M are not covered by your file — want to see them?" On yes,
-show only the uncovered ones and let the adopter pick. On a fresh install
-M equals N and the choice is simply "start empty, or seed". Either way,
-write the shipped version into the marker file afterwards, so the offer
-never repeats until the set changes. **Never pre-populate silently:** the
+show only the uncovered ones and let the adopter pick. **A
+recommendation that names an entry as evidence is a citation:** read
+the cited bodies in full first, never titles, and say which artefact
+motivated each entry you recommend, as the fresh-install pass below
+does; an entry you have not read is listed, not recommended. A title
+says what an entry is about, not what it shows, and the adopter chooses
+on the evidence given here, one step before the import's "Fits:" line
+would have checked it — a recommendation drafted from titles has cited
+entries about something else, and only the import caught it. **The
+marker records an answer, not an offer:** write the shipped version into the
+marker file only after an explicit choice — seed all, seed some, or
+start empty — so the offer never repeats until the set changes. A reply
+that does not address the offer is not a choice: leave the marker absent
+so the offer returns next session. Ask it as its own question, never as
+the last line of another task's report, where it goes unread and the
+next reply approves that report instead. **Never pre-populate silently:** the
 live file's authority comes from the adopter's own evidence trail, and
 unexamined imported rules contradict the pruning principle the file itself
 carries (entry 11).
+
+**On a fresh install, the comparison has no second operand — run an
+evidence pass instead of offering all-or-nothing.** The procedure above is
+a diff against the adopter's existing principles file. On a fresh install
+there is none, M equals N, and "start empty, or seed" is the weakest
+possible framing of the most consequential decision this file describes:
+seeding all N imports rules with no local evidence, which entry 11 argues
+against and the `Origin:` marker exists to flag; starting empty discards a
+set that took a long run of the loop to accumulate. The useful answer is a
+subset, and the evidence for choosing one is local, cheap to read, and
+already on disk:
+
+- commit history — a documented format or convention that is violated
+  repeatedly is the argument for the principle that would have caught it;
+- the installed skills and their structure — line counts, whether rules
+  are enforced by a script or only stated, which skills delegate to
+  subagents;
+- existing enforcement scripts, hooks and CI;
+- handover docs, memory notes, and any `CLAUDE.md`-equivalent, which are
+  largely a record of corrections nobody logged.
+
+**Offer first, read on yes — the offer stays one line.** On a fresh
+install the line is: "the bundle ships N starter principles — want me to
+read this project's history and propose the ones it supports?" Nothing
+is read before the adopter answers, as with SKILL.md step 7's backfill
+offer. On yes, do the reading in one batched pass, then offer the
+evidence-grounded subset and say which artefact motivated each entry you
+propose. An entry with no local evidence is not imported — the
+rejections are as much a part of the pass as the imports. Where the pass
+finds no evidence at all (an empty repository, no history), fall back to
+the plain choice: start empty, or seed.
+
+This is the same evidence pass SKILL.md step 7 ("First run") describes for
+backfilling observations, over the same artefacts. A fresh install should
+do the reading once and serve both, rather than twice or not at all; a
+user-scope workspace spanning many repositories reads the one the session
+started in, and says so.
 
 **How to import:** copy the entries the adopter chooses (all, or a subset)
 into the live file in the template format from `references/skill-authoring.md`,
@@ -85,11 +136,13 @@ prevent.
 - 20. Skills contain only behaviour-changing content
 - 21. Use agent-agnostic language in open-source skills
 - 22. Verifying current vendor guidance requires a dated changelog check, not just the docs page
-- 23. Never aggregate across structurally different segments
+- 23. Never aggregate across structurally different segments, or against an unmeasured baseline
 - 24. Fetch the instance before describing it
 - 25. One verified reason beats two, where the second is unchecked
 - 26. A companion skill must declare its coverage boundary
 - 27. Every skill ships as a bundle and is structured for progressive disclosure, regardless of size
+- 28. Absence is never established by a summarising instrument
+- 29. A skill holds method; dated values live in a workspace file the skill names
 
 ---
 
@@ -104,10 +157,14 @@ author; the requirement is that there *be* a licence.
 
 ### 2. Open-source skills must include author attribution and a feedback pathway
 **Applies to:** all open-source skills
-**Requirement:** Include an attribution block at the top of the skill with
-author name, contact link, licence statement, and a feedback and support
-pathway (an issue tracker, a repository, a contact address). A published
-skill without a route back to its author cannot improve from its readers.
+**Requirement:** Carry author and licence in the frontmatter (`license:`
+plus `metadata:` with author and source) and repeat them in a one-line
+footer at the end of the skill, which survives tools that strip frontmatter.
+Open the body with what the skill does, not credits. Give the canonical
+source and a feedback pathway (an issue tracker, a repository, a contact
+address) as an offer to draft a report, in a short section just before the
+footer. A published skill without a route back to its author cannot
+improve from its readers.
 
 ### 3. Skills with rules must include a pre-flight verification step
 **Applies to:** all skills with explicit rules or requirements
@@ -147,7 +204,7 @@ reference file and point to it.
 **Requirement:** Use subagents for speed, but never let them guess at data
 values. Safe delegations: validation, formatting checks, cross-reference
 checks — anything where every required input can be passed in the brief.
-Unsafe without safeguards: anything requiring live data. For data-bearing
+Unsafe unless guarded: anything requiring live data. For data-bearing
 tasks, the parent gathers the raw data first and passes it complete; a
 subagent lacking a value writes a `[VERIFY: value not confirmed]`
 placeholder rather than a plausible invention. After the return, the
@@ -312,10 +369,11 @@ documentation needs a second channel (changelog, raw fetch, or browser)
 before delivery — channel staleness is the first hypothesis, not vendor
 absence.
 
-### 23. Never aggregate across structurally different segments
+### 23. Never aggregate across structurally different segments, or against an unmeasured baseline
 **Applies to:** all skills that report a metric summed, averaged, or ranked
 over more than one segment (market, brand, client, instrument, template,
-channel, time bucket)
+channel, time bucket), and all skills that attribute a failing check to a
+change
 **Requirement:** Before aggregating, check whether the segments are
 structurally comparable — same instrument, same population size, same
 denominator behaviour. If not, report per segment first, and aggregate
@@ -324,7 +382,15 @@ not a neutral default. The diagnostic: an aggregate over heterogeneous
 segments always flatters one segment and buries another, **and the buried
 one is usually the finding** — so when an aggregate produces a "weakness",
 check whether a small segment is being drowned by a large one before
-reporting it.
+reporting it. The same error across time: a check that fails after a
+change is attributed to the change only once the baseline is measured.
+Run the check on the untouched state first — the base commit, the file
+before the edit, the harness's own command on the unmodified tree — and
+compare the two runs; a failure already present at the baseline is
+inherited, and is reported as such, not fixed as if the change had
+introduced it. "Before" and "after" are two segments, and a comparison
+in which one of them was assumed green rather than measured is an
+aggregate over a segment nobody looked at.
 
 ### 24. Fetch the instance before describing it
 **Applies to:** all skills that describe, classify, or verify a specific
@@ -401,3 +467,38 @@ new or substantially revised work. Rationale: a rule that switches on
 artefact size creates two formats for one thing and a boundary every
 consumer must re-derive, and one format removes the bare-SKILL.md
 truncation class of install failures outright.
+
+### 28. Absence is never established by a summarising instrument
+**Applies to:** all skills that make claims about the contents of an
+artefact — a sheet, a page, a listing file, a repository, a report, a
+tool surface
+**Requirement:** No statement of the form "X is not in Y" may rest on an
+instrument that summarises, samples, renders or answers a question about
+Y — a document connector's table view, a fetch tool's answer, a search
+result, a rendered summary. Presence can be established by such an
+instrument (it found the thing); absence cannot, because "the thing is
+absent" and "the instrument did not look" produce identical output and
+read as equally confident prose. Absence needs the raw artefact — the full
+sheet, the raw HTML or listing file, the complete export — and a literal
+match run over it; the claim names the instrument that produced it or
+does not ship, and a claim whose instrument is a summariser is removed,
+never softened. Where an instrument returns both a declared size and a
+rendering (a table range and its rows, a count and a page), compare the
+two before reading anything out of it; a mismatch means a sample, not the
+population. Prefer the interface that returns the artefact to the one
+that returns a summary of it, because only the latter can silently
+shorten.
+
+### 29. A skill holds method; dated values live in a workspace file the skill names
+**Applies to:** all skills, open-source and internal
+**Requirement:** A skill holds method, rules and workflow — what is as
+true next year as today. Anything with a date or a current value —
+goals, figures, rates, schedules, client and source mappings, logs —
+lives in a workspace file the skill names (in its reference index,
+entry 13). The skill is the single owner of the method; the file is
+the single owner of the values. When two skills need the same value,
+both point at the file and neither copies it. Rationale: a dated value
+inside a skill goes stale silently — the skill is loaded as if it were
+current, changing a number takes a skill review, and copies held by two
+skills diverge. A value in a workspace file is updated without a review
+and lives in one place.

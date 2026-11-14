@@ -11,7 +11,24 @@
       "source": {
         "source": "github",
         "repo": "rebelytics/one-skill-to-rule-them-all"
-      }
+      },
+      "description": "Turns the corrections and repeated workflows of your work sessions into small, reviewed skill updates: every change comes with its evidence and a written reason, and nothing touches a skill until you approve and install it.",
+      "category": "productivity",
+      "keywords": [
+        "agent-skills",
+        "skill-improvement",
+        "meta-skill",
+        "skill-authoring",
+        "session-observation",
+        "human-in-the-loop",
+        "feedback-loop"
+      ]
+    },
+    {
+      "name": "task-observer-flush",
+      "source": "./plugins/task-observer-flush",
+      "description": "Turn-end guard for task-observer (experimental): notes a turn that used tools and wrote nothing to the observation log or checkpoints.log, and reminds the next turn to flush.",
+      "category": "productivity"
     }
   ]
 }
