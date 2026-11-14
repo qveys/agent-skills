@@ -44,6 +44,24 @@ C'est un répertoire codé en dur qui n'existe plus (montage déplacé, conteneu
 4. Prouver le fix en exécutant le wrapper depuis le shell (le vrai chemin cron), pas seulement en relisant le diff.
 5. Rafraîchir `last_status: error` dans `jobs.json` après vérification : l'erreur enregistrée survit au fix et fait ré-alerter tout watchdog qui hache les clés `job-error:`.
 
+## Variante : module Node introuvable / mauvais extension
+
+Signature :
+
+```
+Script exited with code 1
+Error: Cannot find module '/chemin/scripts/x.mjs'
+```
+
+ou, quand le fichier existe sans extension : `SyntaxError: Cannot use import statement outside a module`.
+
+Un script ESM peut avoir été commité **sans son extension `.mjs`** (renommage accidentel, import de template) : le relais le cherche en `.mjs` et échoue alors que le contenu est intact. Vérifier avant de réécrire le wrapper :
+
+1. `ls <dossier>/x*` — si `x` existe et commence par `#!/usr/bin/env node` + des `import`, c'est le script, pas un wrapper.
+2. `cd <dossier> && node x` — s'il sort `Cannot use import statement outside a module`, l'extension est la cause racine, pas le chemin.
+3. Corriger la cause dans le dépôt concerné : `git mv x x.mjs` + commit + push (pour le vault : passer par le worktree de profil, cf. `vault-worktree`). Ne pas dupliquer le script dans le profil et ne pas bricoler `--experimental-default-type=module` : le prochain appelant cassera pareil.
+4. Prouver : `node <fichier>.mjs` puis `hermes cron run <id>` et lire la sortie dans `cron/output/<id>/`.
+
 ## Procedure
 
 ### 0. Read-before-write

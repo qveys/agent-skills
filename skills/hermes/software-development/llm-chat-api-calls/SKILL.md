@@ -1,13 +1,13 @@
 ---
 name: llm-chat-api-calls
-description: "Use when calling an OpenAI-compatible LLM chat API robustly."
+description: "Use when calling an OpenAI-compatible LLM chat API robustly, or debugging an LLM gateway/router (provider keys, budgets, fail-closed)."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
 metadata:
   opencode/autoinvoke: false
   hermes:
-    tags: [llm, api, chat-completions, reasoning-model, openai-compatible, retry]
+    tags: [llm, api, chat-completions, reasoning-model, openai-compatible, retry, gateway, router, provider-keys, budget]
     related_skills: [service-api-onboarding, systematic-debugging]
 ---
 
@@ -62,6 +62,10 @@ dès le premier appel.
 - Tester l'appel avec `curl` direct sur le modèle ET avec `max_tokens` élevé avant d'intégrer.
 - Écrire un test unitaire qui vérifie : modèle raisonnant → `content` non vide ; 429 → retry
   réussi ; sortie string → normalisée en dict.
+
+## Passerelle LLM de l'instance (OmniRoute)
+
+Quand une session Hermes voit une panne « provider » (clé rejetée, 402/403, modèles indisponibles), la cause peut être la passerelle auto-hébergée OmniRoute qui sert les clés `hermes` : budget par clé, tarification manquante, flags runtime. Procédure de diagnostic, endpoints vérifiés et corrections : `references/omniroute-gateway.md`.
 
 ## Voir aussi
 

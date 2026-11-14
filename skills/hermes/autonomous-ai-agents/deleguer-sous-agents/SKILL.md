@@ -78,7 +78,7 @@ Quand on rejoue un lot complet, exclure explicitement dans chaque body les fichi
 
 ## Skill de référence
 
-Si le dépôt de travail porte sa propre copie de la skill (ex. `<dépôt>/.agents/skills/<nom>/SKILL.md`), le body pointe vers elle : c'est la source de vérité, à jour. La copie du profil (`/opt/data/profiles/<profil>/skills/`) peut être en retard ; faire lire la version du dépôt. Si la skill vit dans le dépôt partagé (clone `agent-skills`, `skills/<nom>/…`), c'est ce dossier qui fait foi.
+Si le dépôt de travail porte sa propre copie de la skill (ex. `<dépôt>/.agents/skills/<nom>/SKILL.md`), le body pointe vers elle : c'est la source de vérité, à jour. La copie du profil (`/opt/data/profiles/<profil>/skills/`) peut être en retard ; faire lire la version du dépôt. Si la skill vit dans un dossier partagé (`/opt/data/shared-skills/common/…`), c'est ce dossier qui fait foi.
 
 Pour **corriger** cette skill, éditer la copie qui fait foi avec les outils fichier (`patch`), pas `skill_manage` qui écrit la copie du profil quand l'utilisateur veut la version du dossier. Réaligner la copie du profil ensuite si besoin (skill `sync-profile-skills`, si le profil la possède).
 
