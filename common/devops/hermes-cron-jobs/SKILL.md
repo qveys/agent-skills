@@ -23,14 +23,14 @@ Dans cette installation, un job récurrent se crée avec le cron Hermes, jamais 
 
 ## Nomenclature obligatoire des jobs
 
-Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver).
+Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver). La cadence à bannir est la fréquence ou l'heure (`quotidien 22h22`, `every 2m`, `dimanche 20h`) ; un slug qui nomme le rituel reste conforme : `daily-review-reminder` et `weekly-review-prep` désignent la daily et la weekly, pas leur horaire.
 
 - `<profil>` = répertoire du profil (`$HERMES_HOME` quand c'est la racine = `default`), jamais un libellé inventé (`Éclaireur —`, `Vigie —` : non).
 - `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`.
 - Nouvelle tâche : d'abord chercher un slug existant, n'en créer un que si la nature du travail diffère vraiment.
 - Pas de chemin, d'URL, de chat_id ni de seuil dans le nom (ils vont dans le prompt, le script ou le body du job).
 
-Renommer : `HERMES_HOME=<dir du profil> hermes cron edit <job_id> --name "<profil> · <tâche>"` (le provider relit `jobs.json` à chaque tick, pas de restart nécessaire). Contrôle de conformité : lister tous les `jobs.json` et vérifier que chaque `name` commence par `<profil> · `.
+Renommer : `HERMES_HOME=<dir du profil> hermes cron edit <job_id> --name "<profil> · <tâche>"` (le provider relit `jobs.json` à chaque tick, pas de restart nécessaire). Contrôle de conformité : lister tous les `jobs.json` et vérifier que chaque `name` commence par `<profil> · `. Un `edit --schedule` suffit pour changer la fréquence d'un job existant sans le recréer ; revérifier la ligne `Schedule` par `hermes cron list` après coup.
 
 ## Procedure
 
@@ -126,6 +126,17 @@ Recettes et chemins exacts : `references/diagnostic-livraison.md`. Cas « le job
 - **Plusieurs jobs en erreur avec la même signature = cause partagée, pas N pannes indépendantes.** Un `cd: <chemin>: No such file or directory` sur plusieurs wrappers signale un montage déplacé : corriger la cause une fois pour toute la classe (procédure dans `cron-script-recovery`), pas job par job.
 - **Le chemin codé en dur vit à deux endroits : le `cd` du wrapper et le `workdir` du job dans `jobs.json`.** Réparer les wrappers sans relire `jobs.json` laisse les jobs ancrés sur l'ancien chemin.
 - **Rafraîchir `last_status` après une correction de wrapper.** L'erreur enregistrée survit au fix et fait ré-alerter un watchdog dont l'empreinte inclut la clé `job-error:` — repasser le statut à `ok` et vider `last_error` une fois le wrapper vérifié à la main depuis le shell.
+- **Le même script de détection partagé par plusieurs jobs n'en fait pas des doublons.** Avant d'archiver un « doublon », comparer nom, profil, cadence, `deliver` et prompt : deux jobs peuvent exécuter le même script et diverger ensuite (rappel agent vs appel téléphonique à l'utilisateur). Seul un job redondant de bout en bout (même cible, même cadence, même livraison) se supprime — et `hermes cron remove` emporte aussi son historique de sortie.
+
+### Gate de réveil : un job agent qui ne paie que s'il y a du travail
+
+Un job `no_agent=false` récurrent (ex. `inbox-check` toutes les 2 h) consomme des tokens à chaque tick, même quand il n'y a rien à faire, et tombe en erreur `429` dès que la clé du profil est à court de quota alors que le dossier surveillé est vide. Fixer la cause : un **script de pré-run** dont la dernière ligne est un wake gate.
+
+- Le scheduler lit la dernière ligne non vide de stdout : le JSON `wakeAgent: false` → **aucun appel modèle**, run enregistré `ok` et silencieux ; toute autre sortie → l'agent est réveillé et reçoit cette sortie dans son prompt.
+- Sans travail, écrire exactement `{"wakeAgent": false}` ; avec du travail, lister les entrées **et terminer explicitement par `{"wakeAgent": true}`** pour qu'un aperçu de fichier ne soit jamais confondu avec le gate.
+- Prévoir un override de test (`INBOX_DIR="${INBOX_DIR:-/chemin/réel}"`) pour valider les deux branches sans toucher la vraie boîte.
+- Le gate protège aussi du `429` : profil à quota épuisé, un tick vide reste `ok` au lieu de faire grossir `failure_streak`.
+- Alternative équivalente pour une détection par empreinte : `monitor_script` (statut `no_change (agent run suppressed)`). Le gate reste préférable quand un fichier non traité doit être **re-signalé** à chaque tick : un monitor hashé le supprime silencieusement.
 
 ### Watchdog « alerte au changement d'état » (job de supervision)
 
