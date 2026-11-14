@@ -42,6 +42,23 @@ Most "the card is stuck" reports are dispatch-configuration faults, not task fau
 
 Two consecutive spawn failures auto-block the card. Neither `worktree: true` nor a wrong workspace path is a task defect — fix the configuration, then `kanban_unblock` to requeue. Unblocking is the supported retry; do not recreate the card and do not assign it to yourself.
 
+## Cartes retenues par le garde-fou (`blocker_auth`)
+
+Symptôme : `WARNING gateway.run: kanban dispatcher stuck: ready queue non-empty for N consecutive ticks but 0 workers spawned. Last tick held back: blocker_auth=***. Check profile health (venv, PATH, credentials) and \`hermes kanban list --status ready\``.
+
+- La phrase « Check profile health (venv, PATH, credentials) » est un **texte générique** de `gateway/kanban_watchers.py`, émis dès que la file `ready` n'est pas vide et que rien n'est parti. Ce n'est **pas** un diagnostic : il n'existe aucun contrôle de venv, de PATH ni de credentials derrière ce message.
+- La vraie raison est la clé `blocker_auth`, produite par `hermes_cli/kanban_db_dispatch.py` quand le `last_failure_error` **de la carte** matche `_RESPAWN_BLOCKER_RE` : `quota`, `rate-limit`, `429`, `403`, `auth*`, `unauthorized`, `forbidden`, `billing`, `subscription`, `access/permission denied`, `invalid api key`.
+- Intention assumée : une carte qui vient d'échouer sur quota ou authentification n'est pas relancée à l'aveugle. Le garde-fou fonctionne, il ne faut **pas** affaiblir le motif.
+- Diagnostic correct : lire l'erreur des cartes concernées plutôt que le message du watcher.
+
+```bash
+sqlite3 "$HERMES_KANBAN_HOME/kanban.db" \
+  "SELECT id, status, assignee, substr(last_failure_error,1,120) FROM tasks WHERE coalesce(last_failure_error,'')<>'' AND status IN ('ready','blocked');"
+```
+
+- Correctif : traiter la cause quota/auth **hors** du board (budget ou crédits du fournisseur, clé expirée), puis constater l'arrêt du garde-fou au tick suivant. Aucune modification de code n'est attendue.
+- Symptôme trompeur à ne pas confondre : une rafale de `-15` sur des jobs cron au même instant n'est pas un problème de worker mais un redémarrage de la passerelle (voir `hermes-cron-jobs`, pitfall sur les SIGTERM s6).
+
 ## Diagnostic order
 
 Work outward from the worker's own stdout; each step answers a different question.
