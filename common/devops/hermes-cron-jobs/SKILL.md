@@ -59,6 +59,12 @@ Pièges de recréation du conteneur et de relance des serveurs persistants : voi
 - `deliver` selon le canal voulu (`local` = fichier seulement).
 - `workdir` = chemin absolu existant si les outils fichier doivent s'y ancrer.
 
+### 3bis. Checklist avant d'enregistrer (les trois pannes silencieuses)
+
+1. **Gate** — job agent qui surveille une boîte (`inbox-check`, `vault-inbox`) : script de pré-run avec `{"wakeAgent": false}` (section « Gate de réveil »).
+2. **Chaîne de secours vivante** — `hermes fallback list` sur le profil : chaque entrée doit pointer une clé *différente* du primaire. `omniroute/free` après `omniroute/mid` = la même clé, donc aucun secours en cas de quota ; ajouter une entrée `custom` + `base_url` + `key_env` vers un provider réellement testé.
+3. **Cible de livraison atteignable** — un job d'un profil satellite (sans `platforms.telegram.enabled`) ne livre que vers un topic couvert par `gateway.profile_routes` du profil propriétaire ; hors route, refus fail-closed `platform '<p>' not configured/enabled`. Vérifier par un job `no_agent` temporaire avant de compter sur l'alerte.
+
 ### 4. Vérifier
 
 Exécuter le wrapper à la main depuis un shell, puis `list`. Ne pas déclarer le job opérationnel tant que le wrapper n'a pas produit la sortie attendue.
