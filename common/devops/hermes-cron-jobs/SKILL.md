@@ -55,6 +55,7 @@ Pièges de recréation du conteneur et de relance des serveurs persistants : voi
 
 - Scripts déterministes, stdout livrable tel quel : `no_agent=true`. Le prompt est alors ignoré. Stdout vide = rien n'est livré.
 - Raisonnement / filtrage / alerte conditionnelle : laisser l'agent (`no_agent=false`) et un prompt autoportant.
+- **Réflexe : tout job agent qui surveille une boîte (`inbox-check`, `vault-inbox`) reçoit un gate de pré-run** (section « Gate de réveil ») — sinon il consomme des tokens à chaque tick sur une boîte vide et casse en `429` dès que le quota tombe. Le prompt du job doit alors dire que la liste est *injectée par le script*.
 - `deliver` selon le canal voulu (`local` = fichier seulement).
 - `workdir` = chemin absolu existant si les outils fichier doivent s'y ancrer.
 
