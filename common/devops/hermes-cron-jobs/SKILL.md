@@ -200,6 +200,8 @@ Tout ce qu'un job cron livre à l'utilisateur (digest de supervision, alerte, r�
 
 ### Livraison Telegram threadée (mode sujets/forums)
 
+Pour publier une modification de skill ou de wrapper sur un dépôt GitHub protégé (commits signés + PR obligatoire), la recette du harnais `gh-sign-commit` (GraphQL `createCommitOnBranch`, committer GitHub, `verified:true`) et le contournement du fichier en mode `644` sont dans la skill `github`, section « Core discipline ». Un push direct sur `main` y est refusé : branche + PR + merge sans `--admin`.
+
 Pour que les notifications cron arrivent en mode threadé (dans un sujet/topic Telegram plutôt que dans le fil principal), deux mécanismes existent — ne pas les confondre avec une livraison `reply_to` qui ne crée pas de thread durable.
 
 **Option A — Cible explicite par job** (privilégiée quand un job doit aller vers un topic précis) :
