@@ -1,0 +1,2 @@
+# Faux positif TruffleHog (détecteur Gitlab, non vérifié) sur un lien de documentation vendorisé
+vendor/mattpocock-skills/setup-matt-pocock-skills/SKILL.md
