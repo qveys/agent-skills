@@ -65,7 +65,7 @@ Supporting assets: `scripts/gh-env.sh` + `scripts/git-credential-token.py`
   `createCommitOnBranch` refuses an unknown branch — then run
   `REF=refs/heads/<branch> PARENT=<base-sha> MESSAGE="..." scripts/gh-sign-commit.sh <paths...>`
   from a worktree holding the final content, and confirm the printed
-  `verified:true`. Fallback when the harness is unavailable: one
+  `verified:true`. Le fichier du dépôt est en mode `644` : lancer `bash <chemin>/gh-sign-commit.sh …` (sinon `Permission denied`), et passer `bash` aussi pour la copie locale si elle a perdu son bit exécutable. Fallback when the harness is unavailable: one
   `PUT /repos/O/R/contents/<path>` per file (committer `web-flow`). Either way
   this rewrites history — the old PR becomes obsolete, so open a fresh PR and
   close the blocked one with a pointer comment.
