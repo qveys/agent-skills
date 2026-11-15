@@ -26,7 +26,7 @@ Dans cette installation, un job récurrent se crée avec le cron Hermes, jamais 
 Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver). La cadence à bannir est la fréquence ou l'heure (`quotidien 22h22`, `every 2m`, `dimanche 20h`) ; un slug qui nomme le rituel reste conforme : `daily-review-reminder` et `weekly-review-prep` désignent la daily et la weekly, pas leur horaire.
 
 - `<profil>` = répertoire du profil (`$HERMES_HOME` quand c'est la racine = `default`), jamais un libellé inventé (`Éclaireur —`, `Vigie —` : non).
-- `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`.
+- `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`, `checkpoints-purge`.
 - Nouvelle tâche : d'abord chercher un slug existant, n'en créer un que si la nature du travail diffère vraiment.
 - Pas de chemin, d'URL, de chat_id ni de seuil dans le nom (ils vont dans le prompt, le script ou le body du job).
 
@@ -146,6 +146,21 @@ Un job `no_agent=false` récurrent (ex. `inbox-check` toutes les 2 h) consomme d
 - Prévoir un override de test (`INBOX_DIR="${INBOX_DIR:-/chemin/réel}"`) pour valider les deux branches sans toucher la vraie boîte.
 - Le gate protège aussi du `429` : profil à quota épuisé, un tick vide reste `ok` au lieu de faire grossir `failure_streak`.
 - Alternative équivalente pour une détection par empreinte : `monitor_script` (statut `no_change (agent run suppressed)`). Le gate reste préférable quand un fichier non traité doit être **re-signalé** à chaque tick : un monitor hashé le supprime silencieusement.
+
+### Prouver la chaîne de secours d'un profil (sans toucher aux credentials)
+
+Un `hermes fallback list` qui s'affiche ne prouve rien : la bascule doit être vue en exécution.
+
+1. Sauvegarder la config du profil (`cp -a … /opt/data/backups/<profil>.config-pretest-*.yaml`).
+2. Casser le champ qui porte réellement l'URL : `custom_providers[].base_url` si `model.provider: custom:<nom>`, sinon `model.base_url` (provider `custom`, `alibaba-token-plan`, …). Une valeur `http://127.0.0.1:9/v1` produit une erreur de connexion, donc une bascule.
+3. Créer un job one-shot agent : `hermes cron create 'in 1m' 'Réponds exactement: OK' --name '<profil> · test-fallback' --deliver local --repeat 1` (le `--deliver local` évite de spammer).
+4. `hermes cron run <id>` : attendre `⚠️ Model fallback: … unavailable (…) ; using <modèle> via <provider>` puis `Ran now: succeeded`, et confirmer `API call #1: model=<fallback>` dans `logs/agent.log`.
+5. Restaurer, vérifier par `diff` contre le backup, supprimer le job.
+
+Pièges observés :
+- `hermes cron remove` efface aussi `cron/output/<job_id>/` : lire le document du run **avant** de supprimer si le verdict n'est pas déjà dans les logs.
+- Un run peut finir `failed` sur un aléa de streaming alors que la bascule a produit sa réponse : relancer une fois avant de conclure. Un `interrupted_during_api_call` (timeout sans progrès sur une entrée lente) n'invalide pas la chaîne, il signale une entrée à réordonner.
+- Provider hébergé (`nous`, etc.) : `model.base_url` y est ignoré et on ne touche pas aux credentials — la chaîne ne peut alors être prouvée qu'indirectement (voir l'entrée utilisée comme cible de bascule dans un autre profil).
 
 ### Watchdog « alerte au changement d'état » (job de supervision)
 
