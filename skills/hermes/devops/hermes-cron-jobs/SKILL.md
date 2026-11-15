@@ -6,7 +6,6 @@ author: Hermes Agent
 license: MIT
 platforms: [linux, macos]
 metadata:
-  opencode/autoinvoke: false
   hermes:
     tags: [cron, hermes, scheduler, no_agent, scripts]
     related_skills: [cron-script-recovery, git-worktree-workflow]
@@ -27,7 +26,7 @@ Dans cette installation, un job récurrent se crée avec le cron Hermes, jamais 
 Format unique : `<profil> · <tâche>` — séparateur ` · ` (espace, point médian, espace), tâche en kebab-case français, **sans cadence dans le nom** (le champ `schedule` est la seule source de vérité : dupliquer la cadence dans le nom la fait dériver). La cadence à bannir est la fréquence ou l'heure (`quotidien 22h22`, `every 2m`, `dimanche 20h`) ; un slug qui nomme le rituel reste conforme : `daily-review-reminder` et `weekly-review-prep` désignent la daily et la weekly, pas leur horaire.
 
 - `<profil>` = répertoire du profil (`$HERMES_HOME` quand c'est la racine = `default`), jamais un libellé inventé (`Éclaireur —`, `Vigie —` : non).
-- `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`.
+- `<tâche>` = vocabulaire fermé, réutilisé entre profils pour que le même travail porte le même nom partout : `inbox-check`, `veille-cycle`, `daily-review-reminder`, `weekly-review-prep`, `vault-health`, `vault-stats`, `vault-inbox`, `vault-push`, `systeme-supervision`, `crew-check`, `crew-project`, `worktree-audit`, `opencode-models-audit`, `observabilite-journal`, `orchestrateur-alerte-fin-tour`, `checkpoints-purge`.
 - Nouvelle tâche : d'abord chercher un slug existant, n'en créer un que si la nature du travail diffère vraiment.
 - Pas de chemin, d'URL, de chat_id ni de seuil dans le nom (ils vont dans le prompt, le script ou le body du job).
 
@@ -56,8 +55,15 @@ Pièges de recréation du conteneur et de relance des serveurs persistants : voi
 
 - Scripts déterministes, stdout livrable tel quel : `no_agent=true`. Le prompt est alors ignoré. Stdout vide = rien n'est livré.
 - Raisonnement / filtrage / alerte conditionnelle : laisser l'agent (`no_agent=false`) et un prompt autoportant.
+- **Réflexe : tout job agent qui surveille une boîte (`inbox-check`, `vault-inbox`) reçoit un gate de pré-run** (section « Gate de réveil ») — sinon il consomme des tokens à chaque tick sur une boîte vide et casse en `429` dès que le quota tombe. Le prompt du job doit alors dire que la liste est *injectée par le script*.
 - `deliver` selon le canal voulu (`local` = fichier seulement).
 - `workdir` = chemin absolu existant si les outils fichier doivent s'y ancrer.
+
+### 3bis. Checklist avant d'enregistrer (les trois pannes silencieuses)
+
+1. **Gate** — job agent qui surveille une boîte (`inbox-check`, `vault-inbox`) : script de pré-run avec `{"wakeAgent": false}` (section « Gate de réveil »).
+2. **Chaîne de secours vivante** — `hermes fallback list` sur le profil : chaque entrée doit pointer une clé *différente* du primaire. `omniroute/free` après `omniroute/mid` = la même clé, donc aucun secours en cas de quota ; ajouter une entrée `custom` + `base_url` + `key_env` vers un provider réellement testé.
+3. **Cible de livraison atteignable** — un job d'un profil satellite (sans `platforms.telegram.enabled`) ne livre que vers un topic couvert par `gateway.profile_routes` du profil propriétaire ; hors route, refus fail-closed `platform '<p>' not configured/enabled`. Vérifier par un job `no_agent` temporaire avant de compter sur l'alerte.
 
 ### 4. Vérifier
 
@@ -124,6 +130,8 @@ Recettes et chemins exacts : `references/diagnostic-livraison.md`. Cas « le job
 - **Reformater l'affichage d'un watchdog sans toucher aux clés.** L'empreinte de dédup ne hache que les clés stables ; le format du message est purement cosmétique et peut changer librement, mais modifier le FORMAT d'une clé (`disque:/>=88%`) change l'empreinte et fait réémettre à tort (ou masquer une anomalie réelle). Ne retoucher que le second élément des tuples `(clé, message)`.
 - **Tester un changement de format sur script dédupliqué sans toucher à l'état réel.** Le run réel sort à vide tant que l'état n'a pas changé, et les sondes réseau/psutil n'ont rien à faire dans un test de format. Importer le module, rediriger `STATE_FILE` vers un fichier tmp, neutraliser les fonctions de détection et injecter des trouvailles synthétiques, capturer stdout : les deux branches (vert / anomalies) se rendent alors sans supprimer l'état de prod ni attendre une vraie anomalie.
 - **La détection de fuite de chemin/URL dans un test matche des patterns réels, pas des mots nus.** `"http" in sortie` matche le légitime `HTTP 503` d'une ligne de statut ; chercher `https?://`, une IP, un chemin filesystem — sinon le test crie au faux positif sur un status code valide.
+- **Le `base_url` d'un profil n'est pas celui qui décide quand le provider est `custom:<nom>`.** Avec `model.provider: custom:omniroute`, c'est `custom_providers[].base_url` qui gagne : éditer `model.base_url` pour simuler une panne produit un faux test (le provider répond normalement et la bascule ne se déclenche jamais). Casser/restaurer `custom_providers[].base_url`, et comparer la config à un backup après restauration.
+- **`hermes config set model_aliases.<nom>` / `unset` échoue sur les configs racine protégées** : `patch`/`write_file` refusent `/opt/data/config.yaml` (garde-fou config sensible) ; passer par `hermes config set|unset`, qui fonctionne aussi profil par profil avec `HERMES_HOME=<dir>`.
 - **Plusieurs jobs en erreur avec la même signature = cause partagée, pas N pannes indépendantes.** Un `cd: <chemin>: No such file or directory` sur plusieurs wrappers signale un montage déplacé : corriger la cause une fois pour toute la classe (procédure dans `cron-script-recovery`), pas job par job.
 - **Le chemin codé en dur vit à deux endroits : le `cd` du wrapper et le `workdir` du job dans `jobs.json`.** Réparer les wrappers sans relire `jobs.json` laisse les jobs ancrés sur l'ancien chemin.
 - **Rafraîchir `last_status` après une correction de wrapper.** L'erreur enregistrée survit au fix et fait ré-alerter un watchdog dont l'empreinte inclut la clé `job-error:` — repasser le statut à `ok` et vider `last_error` une fois le wrapper vérifié à la main depuis le shell.
