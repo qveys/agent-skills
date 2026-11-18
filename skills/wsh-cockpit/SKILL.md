@@ -75,6 +75,7 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 - **Avant `spawn`, savoir dans quel onglet Wave est l'utilisateur** ; `--tab <nom>` si l'agent n'est pas dans un bloc Wave/tmux fiable. Jamais se fier à `WAVETERM_TABID` seul ; vérifier la ligne « onglet utilisé » après `spawn`.
 - **Bannières obligatoires** pour tout plan multi-étapes, jamais `echo` ni markdown nu.
 - **Une seule session SSH persistante** par hôte, pas une rafale de one-shots.
+- **Ne pas fermer le cockpit en fin de réponse** : `stop` seulement quand l'utilisateur clôt le sujet (voir Nettoyage).
 - **Toujours terminer les commandes par `2>&1`** — non négociable.
 - **Helper absent : réinstaller immédiatement ; inline en dernier recours.** Voir `docs/framing-and-transfer.md`.
 - **Jamais de `send` avant le footer `exit` du précédent** : `wait-done`, jamais un `sleep` ni du grep sur la sortie.
@@ -139,7 +140,15 @@ résous-le **par le service** et exige **un seul** conteneur — jamais
 `docker ps --filter name=` (filtre sous-chaîne). Recette et transport :
 `docs/framing-and-transfer.md`.
 
-## Nettoyage
+## Nettoyage — pas de fermeture prématurée
+
+**Garder le cockpit (et le hop SSH) ouvert tant que le sujet n'est pas clos.**
+Une réponse rendue n'est pas une fin de tâche : l'utilisateur relance presque
+toujours sur le même hôte, et rouvrir coûte `spawn` + `--situate` + hop + `remote-init`
+pour rien. Ne `stop` (ni `exit` le hop) que si l'utilisateur dit que c'est fini,
+le demande, ou passe à un sujet sans rapport avec cet hôte. En fin de réponse,
+signaler simplement « cockpit `<session>` laissé ouvert ». Tour suivant : réutiliser
+la même session (`current`/`status`) avant tout nouveau `spawn`.
 
 **Attends au moins 60s** avant de traiter une session idle comme orpheline — elle
 peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux (avertissement stderr si échec).
