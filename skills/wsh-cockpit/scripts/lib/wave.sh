@@ -56,10 +56,10 @@ sql_quote() {
 wsh_env_fallback() {
   local wbin="$HOME/Library/Application Support/waveterm/bin" l
   command -v wsh >/dev/null 2>&1 || { [ -x "$wbin/wsh" ] && PATH="$wbin:$PATH"; }
-  [ -z "${WAVETERM_JWT:-}" ] && [ -n "${TMUX:-}" ] || return 0
+  [ -z "${WAVETERM_JWT:-}" ] && [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || return 0
   while IFS= read -r l; do
     case "$l" in WAVETERM_*=*) export "$l" ;; esac
-  done < <(tmux show-environment 2>/dev/null)
+  done < <(tmux show-environment -t "$TMUX_PANE" 2>/dev/null)
   return 0
 }
 
