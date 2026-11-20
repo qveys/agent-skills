@@ -3534,6 +3534,38 @@ cmd_selftest_tab() {
     report_tab_case "8 wsh introuvable -> rc=1" 1 "rc=$rc"
   fi
 
+  # 8b. Import only the calling pane's session; an unknown pane must not
+  # borrow another workspace, even when it contains the requested tab name.
+  local pane
+  for pane in '%42' '' '%missing'; do
+    rm -f "$tmpdir/env-call"
+    rc=0
+    (
+      unset WAVETERM_JWT WAVETERM_WORKSPACEID
+      export TMUX=stub TMUX_PANE="$pane"
+      tmux() {
+        printf '%s\n' "$*" >"$tmpdir/env-call"
+        [ "$1" = show-environment ] || return 1
+        if [ "$#" -eq 3 ] && [ "$2" = -t ]; then
+          [ "$3" = '%42' ] || return 1
+          printf '%s\n' 'WAVETERM_JWT=selftest' "WAVETERM_WORKSPACEID=$ws1"
+        else
+          printf '%s\n' 'WAVETERM_JWT=selftest' "WAVETERM_WORKSPACEID=$ws2"
+        fi
+      }
+      wsh_env_fallback
+      local tab_rc=0
+      resolve_tab_by_name "Alpha" "$ro" || tab_rc=$?
+      if [ "$pane" = '%42' ]; then
+        [ "$tab_rc" -eq 0 ] && [ "$TAB_BY_NAME_RESULT" = tabZ ] && [ "$WAVETERM_JWT" = selftest ]
+      else
+        [ -n "$pane" ] || [ ! -f "$tmpdir/env-call" ] || exit 1
+        [ "$tab_rc" -eq 2 ] && [ -z "${WAVETERM_JWT:-}" ] && [ -z "${WAVETERM_WORKSPACEID:-}" ]
+      fi
+    ) || rc=$?
+    report_tab_case "8b tmux environment scoped to pane '${pane:-unset}'" "$rc"
+  done
+
   # 9-11 : resolve_live_tab avec tmux/ps/wsh FACTICES (aucun bloc Wave, aucun
   # vrai tmux). Fixture : T1 (bloc périmé de l'env) et T2 (bloc de la session
   # tmux de l'agent, remonté par l'ascendance de processus).
@@ -4386,7 +4418,8 @@ FAKE
     echo "skip 7 wsh absent (a real wsh sits on the base PATH)"
   else
     rc=0
-    env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    # HOME isolated: the wsh fallback would otherwise find the real Wave bin dir.
+    env -u WAVETERM_BLOCKID -u WAVETERM_WORKSPACEID HOME="$BLK_FAKE/home" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
       WSH_COCKPIT_STATE_DIR="$BLK_FAKE/state" WAVETERM_TABID=aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa \
       "$SCRIPT_DIR/wsh-live.sh" stop "${BLK_PFX}-6" >/dev/null 2>"$BLK_FAKE/err" || rc=$?
     err=$(cat "$BLK_FAKE/err")

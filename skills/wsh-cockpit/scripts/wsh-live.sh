@@ -1079,8 +1079,10 @@ open)
   SESS=$(resolve_session "${ARGS[0]:-}"); need_session "$SESS"
   if [ "$MUX" = tmux ]; then MUX_BIN=$(command -v tmux); else MUX_BIN=$(zellij_bin); fi
   ATTACH=$(mux_attach_cmd "$SESS")
+  wsh_env_fallback
   command -v wsh >/dev/null 2>&1 || {
-    echo "wsh not found — can't auto-open a Wave block. Attach by hand:" >&2
+    echo "wsh not found (not in PATH nor in Wave's bin dir) — can't auto-open a Wave block." >&2
+    echo "Inside tmux, WAVETERM_* must also be importable from 'tmux show-environment'. Attach by hand:" >&2
     echo "  ${ATTACH}" >&2; exit 5; }
 
   TAB=""; TAB_SRC=""
