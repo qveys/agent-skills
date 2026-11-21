@@ -1,6 +1,6 @@
 # Getting Started with the task-observer meta-skill (aka "One skill to rule them all")
 
-This guide includes practical tips for getting value out of the meta-skill. It's based on my own daily usage of the skill across Claude Cowork, the web interface, Claude Code (only via the desktop app) and the mobile app. I've been using this skill for seven months now and it has logged almost 1400 observations across my 78 skills, most of which were applied as skill improvements. The majority of my 78 skills were themselves created based on observations by the meta-skill.
+This guide includes practical tips for getting value out of the meta-skill. It's based on my own daily usage of the skill across Claude Cowork, the web interface, Claude Code (only via the desktop app) and the mobile app. I've been using this skill for nine months now and it has logged over 2,500 observations across my 87 skills, most of which were applied as skill improvements. The majority of my 87 skills were themselves created based on observations by the meta-skill.
 
 The best way to get started with this new work setup in any environment is to grab the skill, the reference files, the user guide and the readme file from the repo and feed them to the AI of your choice. It should then be able to guide you towards the best equivalent of this setup for your particular environment, no matter which system you use. As long as skills are supported, this approach should work with any AI system, with some adjustments.
 
@@ -10,7 +10,7 @@ The rest of this user guide focusses on Claude and specifically Claude Cowork, b
 
 ## Where the skill runs
 
-The skill is a multi-file bundle: `SKILL.md`, a `references/` folder that is loaded on demand, and a `scripts/` folder with two small helpers (the pre-3.0 log migration and the bundle validation gate). To install it, put all three into one folder, zip that folder, and upload it via Settings → Customize in your Claude account. Uploading the bare SKILL.md alone results in a degraded install — the skill still works, but will tell you which files are missing, and the automatic upgrade from a pre-3.0 log won't run without `scripts/` (see the Installation section of the readme for other environments).
+The skill is a multi-file bundle (in the repository, the `skills/task-observer/` folder): `SKILL.md`, a `references/` folder that is loaded on demand, and a `scripts/` folder with six small helpers (the pre-3.0 log migration, the observation-file creator, the session-start scan, the per-skill observation lookup and the bundle validation gate). To install it, put all three into one folder, zip that folder, and upload it via Settings → Customize in your Claude account. Uploading the bare SKILL.md alone results in a degraded install — the skill still works, but will tell you which files are missing, and the automatic upgrade from a pre-3.0 log and the session-start scan won't run without `scripts/` (see the Installation section of the readme for other environments).
 
 Once you've uploaded the skill, it's available in all chats (web interface, mobile app, desktop app) and also in the Cowork and Code tabs of the desktop app. Its full potential can be exploited in Cowork tasks and Code sessions.
 
@@ -61,6 +61,10 @@ Over time, I got used to just asking about the logged observations every time I 
 
 If you want to browse the observations yourself, you'll find them at `[your shared folder]/skill-observations/observation-log/` — one small Markdown file per observation, each starting with a frontmatter header (status, skill, type, date) followed by the issue, the suggested improvement, and the principle. Resolved observations move to `observation-log/archive/`. You don't normally need to look at these directly (Claude handles that), but they're there if you're curious. Storing one file per observation, with the metadata in frontmatter, lets Claude scan just the headers to find what's open instead of re-reading the whole backlog — which keeps token usage low as observations pile up.
 
+### Upgrading between 3.x versions
+
+Replace the bundle, then re-diff your activation block against the template in `references/environments.md`: the block's first line names the template version it came from, and a session that finds an older or unstamped block tells you how it differs and offers the current block without rewriting your file. From 3.10.0 the block is shorter — only what must act before the skill loads — so replace an older block whole rather than merging paragraphs into it.
+
 ### Upgrading from a version before 3.0
 
 Versions before 3.0.0 kept all observations in one file, `skill-observations/log.md`. Version 3.0.0 stores one file per observation. The first session that runs with the new version installed will notice the old file and convert it with a small script bundled in the skill — it checks the log first, reports anything it isn't sure about, and keeps the old file as `log.md.migrated` so nothing is lost. You don't need to do anything except say yes when asked; the details, including how to roll back, are in `references/migration.md`.
@@ -92,6 +96,8 @@ What to expect when the review runs: Claude cross-checks all open observations a
 I only ever reached this threshold once, because I normally update skills more regularly than once a week. But it's there as a safety net to make sure observations don't pile up indefinitely.
 
 Now, since Claude Cowork introduced scheduled tasks, I have an automatic skill review task that runs every Monday, Wednesday and Friday morning. It goes through the 20 to 30 open observations that normally accumulate from my work every two working days. This 3x per week cadence works perfectly for me at the moment.
+
+When a review changes how a skill behaves rather than what it says (a restructure, or a change that has to be tested before it merges), the repository's eval set can check it: `evals/` runs cases headlessly against the old and the new version and reports the pass rate per case for both. You can keep your own cases for any skill you log observations for in a folder outside the repository, such as `[your shared folder]/skill-observations/evals/`; `evals/README.md` explains the format.
 
 ## The skill-creator
 
