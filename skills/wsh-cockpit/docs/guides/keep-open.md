@@ -19,4 +19,6 @@ suivant, réutilise donc la session **par son nom explicite**, passé en argumen
 ## Session idle
 
 Attends au moins 60s avant de traiter une session idle comme orpheline — elle
-peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux (avertissement stderr si échec).
+peut être en plein run. `gc` ferme le bloc Wave avec la session tmux ; `stop` aussi, sauf `--keep` :
+il la libère (`release`), tmux et bloc restent.
+
