@@ -116,17 +116,39 @@ jobs:
             echo "No changes since last sync branch commit; skipping commit."
           else
             cat > "$work/sync_commit.py" <<'PY'
-          import argparse, base64, json, os, subprocess, sys
+          import argparse, base64, json, os, re, subprocess, sys, time
+
+          def ratelimit_reset():
+              # cheap GET with -i: headers carry x-ratelimit-remaining/reset
+              p = subprocess.run(["gh", "api", "-i", "repos/%s" % a.repo],
+                                 capture_output=True, text=True)
+              rem = re.search(r"(?im)^x-ratelimit-remaining:\s*(\d+)", p.stdout)
+              rst = re.search(r"(?im)^x-ratelimit-reset:\s*(\d+)", p.stdout)
+              if rem and rst and rem.group(1) == "0":
+                  return int(rst.group(1))
+              return None
 
           def gh(*args, input_path=None):
               cmd = ["gh", "api", *args]
               if input_path:
                   cmd += ["--input", input_path]
-              p = subprocess.run(cmd, capture_output=True, text=True)
-              if p.returncode != 0:
+              for attempt in range(1, 6):
+                  p = subprocess.run(cmd, capture_output=True, text=True)
+                  if p.returncode == 0:
+                      return p.stdout.strip()
+                  err = (p.stderr + " " + p.stdout).lower()
+                  if "rate limit" in err:
+                      reset = ratelimit_reset()
+                      if reset:
+                          wait = reset - time.time() + 5
+                          if 0 < wait <= 5400:  # GitHub job limit is 6 h
+                              print("rate limit atteint: attente jusqu'au reset (+%ds), tentative %d/5" % (int(wait), attempt), file=sys.stderr)
+                              time.sleep(wait)
+                              continue
                   sys.stderr.write("ERROR: gh api rc=%d: %s\n%s%s\n" % (p.returncode, " ".join(cmd), p.stdout, p.stderr))
                   sys.exit(1)
-              return p.stdout.strip()
+              sys.stderr.write("ERROR: rate limit still active after 5 attempts: %s\n" % " ".join(cmd))
+              sys.exit(1)
 
           ap = argparse.ArgumentParser()
           ap.add_argument("--repo", required=True)
