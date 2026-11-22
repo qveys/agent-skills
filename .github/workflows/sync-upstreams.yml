@@ -63,6 +63,9 @@ jobs:
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
           branch="chore/sync-upstream-skills"
+          tmp_branch="chore/sync-upstreams-tmp"
+          work="$RUNNER_TEMP/sync-commit"
+          mkdir -p "$work"
 
           master_sha=$(gh api "repos/$repo/git/ref/heads/$GITHUB_REF_NAME" --jq '.object.sha')
           git add -A
@@ -71,60 +74,95 @@ jobs:
           # Idempotent like peter-evans/create-pull-request: skip the commit
           # if the sync branch already carries this exact tree, so re-runs
           # with no new upstream changes don't spam the branch.
+          # NB: `--jq` takes exactly one argument; on a missing ref `gh api`
+          # exits non-zero (HTTP 404), which the `if` turns into "branch absent".
           branch_sha=""
           branch_tree=""
-          if branch_sha=$(gh api "repos/$repo/git/ref/heads/$branch" --jq -e '.object.sha' 2>/dev/null); then
+          if branch_sha=$(gh api "repos/$repo/git/ref/heads/$branch" --jq '.object.sha' 2>/dev/null); then
             branch_tree=$(gh api "repos/$repo/git/commits/$branch_sha" --jq '.tree.sha')
           fi
           if [ -n "$branch_sha" ] && [ "$new_tree" = "$branch_tree" ]; then
             echo "No changes since last sync branch commit; skipping commit."
           else
-            # fileChanges for createCommitOnBranch, relative to the commit's
-            # parent (master): additions carry base64 contents, deletions paths.
-            additions='[]'
-            deletions='[]'
-            while IFS=$'\t' read -r status path _extra; do
+            # Changed paths, NUL-separated (-z) so file names with spaces or
+            # non-ASCII characters stay exact; --no-renames turns R into D+A.
+            # Each change is appended as one NDJSON line to a chunk FILE:
+            # nothing large ever goes through argv (MAX_ARG_STRLEN).
+            max_chunk_bytes=1000000 # stay well under the GraphQL payload limit
+            chunk_no=0
+            chunk_dir="$work/chunk-0"
+            mkdir -p "$chunk_dir"
+            : > "$chunk_dir/additions.ndjson"
+            : > "$chunk_dir/deletions.ndjson"
+            while IFS= read -r -d '' status && IFS= read -r -d '' path; do
+              case "$status" in
+                D*) est=64 ;;
+                *)  est=$(( $(wc -c < "$path") * 4 / 3 + ${#path} + 64 )) ;;
+              esac
+              cur=$(cat "$chunk_dir/additions.ndjson" "$chunk_dir/deletions.ndjson" | wc -c)
+              if [ "$cur" -gt 0 ] && [ $((cur + est)) -gt "$max_chunk_bytes" ]; then
+                chunk_no=$((chunk_no + 1))
+                chunk_dir="$work/chunk-$chunk_no"
+                mkdir -p "$chunk_dir"
+                : > "$chunk_dir/additions.ndjson"
+                : > "$chunk_dir/deletions.ndjson"
+              fi
               case "$status" in
                 D*)
-                  deletions=$(jq -cn --arg p "$path" --argjson d "$deletions" '$d + [{path: $p}]')
+                  jq -cn --arg p "$path" '{path: $p}' >> "$chunk_dir/deletions.ndjson"
                   ;;
                 *)
-                  contents_b64=$(base64 < "$path" | tr -d '\n')
-                  additions=$(jq -cn --arg p "$path" --arg c "$contents_b64" --argjson a "$additions" '$a + [{path: $p, contents: $c}]')
+                  jq -cn --arg p "$path" --rawfile c "$path" '{path: $p, contents: ($c | @base64)}' >> "$chunk_dir/additions.ndjson"
                   ;;
               esac
-            done < <(git diff --cached --name-status --no-renames "$GITHUB_REF_NAME")
+            done < <(git diff --cached --name-status --no-renames -z "$GITHUB_REF_NAME")
 
-            # Recreate the sync branch from master via the API (equivalent of
-            # the old `git checkout -B` + `git push -f`, without ever pushing
-            # an unsigned commit): create the ref, or force-update it.
+            # Build the signed commits on a TEMPORARY ref first: the sync
+            # branch is only moved once every commit is verified signed.
+            gh api -X DELETE "repos/$repo/git/refs/heads/$tmp_branch" >/dev/null 2>&1 || true
+            gh api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$tmp_branch" -f "sha=$master_sha" >/dev/null
+
+            # One createCommitOnBranch per chunk (fileChanges read from files
+            # via --slurpfile, not argv); expectedHeadOid chains the commits.
+            # API-created commits are signed by GitHub ("Verified").
+            head="$master_sha"
+            for chunk_dir in "$work"/chunk-*; do
+              [ -d "$chunk_dir" ] || continue
+              [ -s "$chunk_dir/additions.ndjson" ] || [ -s "$chunk_dir/deletions.ndjson" ] || continue
+              jq -n \
+                --arg q 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid signature { isValid wasSignedByGitHub } } } }' \
+                --arg repo "$repo" \
+                --arg branch "$tmp_branch" \
+                --arg head "$head" \
+                --slurpfile additions "$chunk_dir/additions.ndjson" \
+                --slurpfile deletions "$chunk_dir/deletions.ndjson" \
+                '{query: $q, variables: {input: {
+                  branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                  message: {headline: "🔄 chore(sync): update upstream skills"},
+                  expectedHeadOid: $head,
+                  fileChanges: {additions: $additions, deletions: $deletions}
+                }}}' > "$chunk_dir/payload.json"
+              result=$(gh api graphql --input "$chunk_dir/payload.json")
+              commit_oid=$(echo "$result" | jq -r '.data.createCommitOnBranch.commit.oid')
+              sig=$(echo "$result" | jq -r '.data.createCommitOnBranch.commit.signature.isValid')
+              echo "chunk $(basename "$chunk_dir"): commit $commit_oid signature.isValid=$sig"
+              if [ "$sig" != "true" ]; then
+                echo "ERROR: unsigned commit on temp ref; branch $branch left untouched." >&2
+                gh api -X DELETE "repos/$repo/git/refs/heads/$tmp_branch" >/dev/null 2>&1 || true
+                exit 1
+              fi
+              head="$commit_oid"
+            done
+
+            # All commits signed: move the sync branch to the last signed
+            # commit (API equivalent of the old `git push -f`; -F sends a real
+            # boolean, -f would send the string "true"), then drop the temp ref.
             if [ -n "$branch_sha" ]; then
-              gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$master_sha" -f force=true >/dev/null
+              gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$head" -F force=true >/dev/null
             else
-              gh api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$branch" -f "sha=$master_sha" >/dev/null
+              gh api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$branch" -f "sha=$head" >/dev/null
             fi
-
-            # One atomic commit on the branch, signed by GitHub.
-            jq -n \
-              --arg q 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url signature { isValid wasSignedByGitHub } } } }' \
-              --arg repo "$repo" \
-              --arg branch "$branch" \
-              --arg head "$master_sha" \
-              --argjson additions "$additions" \
-              --argjson deletions "$deletions" \
-              '{query: $q, variables: {input: {
-                branch: {repositoryNameWithOwner: $repo, branchName: $branch},
-                message: {headline: "🔄 chore(sync): update upstream skills"},
-                expectedHeadOid: $head,
-                fileChanges: {additions: $additions, deletions: $deletions}
-              }}}' > "$RUNNER_TEMP/create-commit.json"
-            result=$(gh api graphql --input "$RUNNER_TEMP/create-commit.json")
-            commit=$(echo "$result" | jq '.data.createCommitOnBranch.commit')
-            echo "$commit"
-            if [ "$(echo "$commit" | jq -r '.signature.isValid // empty')" != "true" ]; then
-              echo "ERROR: sync commit created via API is not signed; failing the job." >&2
-              exit 1
-            fi
+            gh api -X DELETE "repos/$repo/git/refs/heads/$tmp_branch" >/dev/null 2>&1 || true
           fi
 
           # REST via `gh api`: `gh pr view/edit/create` query the GraphQL
