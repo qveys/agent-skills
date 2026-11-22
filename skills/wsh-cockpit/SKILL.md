@@ -75,6 +75,7 @@ scripts/wsh-step.sh {header|phase|step|done|cmd|defs}  # renderer / one-liner / 
 - **Avant `spawn`, savoir dans quel onglet Wave est l'utilisateur** ; `--tab <nom>` si l'agent n'est pas dans un bloc Wave/tmux fiable. Jamais se fier à `WAVETERM_TABID` seul ; vérifier la ligne « onglet utilisé » après `spawn`.
 - **Bannières obligatoires** pour tout plan multi-étapes, jamais `echo` ni markdown nu.
 - **Une seule session SSH persistante** par hôte, pas une rafale de one-shots.
+- **Ne pas fermer le cockpit en fin de réponse** : voir Nettoyage.
 - **Toujours terminer les commandes par `2>&1`** — non négociable.
 - **Helper absent : réinstaller immédiatement ; inline en dernier recours.** Voir `docs/framing-and-transfer.md`.
 - **Jamais de `send` avant le footer `exit` du précédent** : `wait-done`, jamais un `sleep` ni du grep sur la sortie.
@@ -139,7 +140,8 @@ résous-le **par le service** et exige **un seul** conteneur — jamais
 `docker ps --filter name=` (filtre sous-chaîne). Recette et transport :
 `docs/framing-and-transfer.md`.
 
-## Nettoyage
+## Nettoyage — pas de fermeture prématurée
 
-**Attends au moins 60s** avant de traiter une session idle comme orpheline — elle
-peut être en plein run. `stop` et `gc` ferment le bloc Wave avec la session tmux (avertissement stderr si échec).
+Politique de fermeture et de réutilisation entre les réponses :
+`docs/guides/keep-open.md`.
+
