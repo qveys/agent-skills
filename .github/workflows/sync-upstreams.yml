@@ -46,29 +46,85 @@ jobs:
       # peter-evans/create-pull-request isn't on this repo's Actions allow-list
       # (only actions/checkout and actions/setup-node are), so this uses the
       # gh CLI already on the runner instead.
+      #
+      # The ruleset on master ("main", id 20919538) enforces
+      # `required_signatures`: a plain `git commit` + `git push` from the
+      # runner leaves the commit unsigned (signature null) and the sync PR
+      # stays BLOCKED (measured on PR #65, head aad0f50, mergeStateStatus
+      # BLOCKED). The sync commit is therefore created through the GitHub
+      # API (GraphQL `createCommitOnBranch` with the workflow GITHUB_TOKEN):
+      # commits created via the API are signed by GitHub ("Verified").
+      # `contents: write` above already covers git/refs + createCommitOnBranch.
       - name: Create Pull Request
         if: steps.check_changes.outputs.changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
           branch="chore/sync-upstream-skills"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Idempotent like peter-evans/create-pull-request: skip the
-          # commit/force-push if the sync branch already carries this exact
-          # diff, so re-runs with no new upstream changes don't spam pushes.
+          master_sha=$(gh api "repos/$repo/git/ref/heads/$GITHUB_REF_NAME" --jq '.object.sha')
           git add -A
           new_tree=$(git write-tree)
-          old_tree=$(git fetch origin "$branch:refs/remotes/origin/$branch" 2>/dev/null \
-            && git rev-parse "origin/$branch^{tree}" 2>/dev/null || true)
 
-          if [ "$new_tree" = "$old_tree" ]; then
-            echo "No changes since last sync branch push; skipping commit/push."
+          # Idempotent like peter-evans/create-pull-request: skip the commit
+          # if the sync branch already carries this exact tree, so re-runs
+          # with no new upstream changes don't spam the branch.
+          branch_sha=""
+          branch_tree=""
+          if branch_sha=$(gh api "repos/$repo/git/ref/heads/$branch" --jq -e '.object.sha' 2>/dev/null); then
+            branch_tree=$(gh api "repos/$repo/git/commits/$branch_sha" --jq '.tree.sha')
+          fi
+          if [ -n "$branch_sha" ] && [ "$new_tree" = "$branch_tree" ]; then
+            echo "No changes since last sync branch commit; skipping commit."
           else
-            git checkout -B "$branch"
-            git commit -m "🔄 chore(sync): update upstream skills"
-            git push -f origin "$branch"
+            # fileChanges for createCommitOnBranch, relative to the commit's
+            # parent (master): additions carry base64 contents, deletions paths.
+            additions='[]'
+            deletions='[]'
+            while IFS=$'\t' read -r status path _extra; do
+              case "$status" in
+                D*)
+                  deletions=$(jq -cn --arg p "$path" --argjson d "$deletions" '$d + [{path: $p}]')
+                  ;;
+                *)
+                  contents_b64=$(base64 < "$path" | tr -d '\n')
+                  additions=$(jq -cn --arg p "$path" --arg c "$contents_b64" --argjson a "$additions" '$a + [{path: $p, contents: $c}]')
+                  ;;
+              esac
+            done < <(git diff --cached --name-status --no-renames "$GITHUB_REF_NAME")
+
+            # Recreate the sync branch from master via the API (equivalent of
+            # the old `git checkout -B` + `git push -f`, without ever pushing
+            # an unsigned commit): create the ref, or force-update it.
+            if [ -n "$branch_sha" ]; then
+              gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$master_sha" -f force=true >/dev/null
+            else
+              gh api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$branch" -f "sha=$master_sha" >/dev/null
+            fi
+
+            # One atomic commit on the branch, signed by GitHub.
+            jq -n \
+              --arg q 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url signature { isValid wasSignedByGitHub } } } }' \
+              --arg repo "$repo" \
+              --arg branch "$branch" \
+              --arg head "$master_sha" \
+              --argjson additions "$additions" \
+              --argjson deletions "$deletions" \
+              '{query: $q, variables: {input: {
+                branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                message: {headline: "🔄 chore(sync): update upstream skills"},
+                expectedHeadOid: $head,
+                fileChanges: {additions: $additions, deletions: $deletions}
+              }}}' > "$RUNNER_TEMP/create-commit.json"
+            result=$(gh api graphql --input "$RUNNER_TEMP/create-commit.json")
+            commit=$(echo "$result" | jq '.data.createCommitOnBranch.commit')
+            echo "$commit"
+            if [ "$(echo "$commit" | jq -r '.signature.isValid // empty')" != "true" ]; then
+              echo "ERROR: sync commit created via API is not signed; failing the job." >&2
+              exit 1
+            fi
           fi
 
           # REST via `gh api`: `gh pr view/edit/create` query the GraphQL
