@@ -46,29 +46,201 @@ jobs:
       # peter-evans/create-pull-request isn't on this repo's Actions allow-list
       # (only actions/checkout and actions/setup-node are), so this uses the
       # gh CLI already on the runner instead.
+      #
+      # The ruleset on master ("main", id 20919538) enforces
+      # `required_signatures`: a plain `git commit` + `git push` from the
+      # runner leaves the commit unsigned (signature null) and the sync PR
+      # stays BLOCKED (measured on PR #65, head aad0f50, mergeStateStatus
+      # BLOCKED). Sync commits are therefore created through the GitHub API
+      # with the workflow GITHUB_TOKEN (`contents: write` above already
+      # covers git/blobs, git/trees, git/commits, git/refs).
+      #
+      # Mechanism (r3): REST git data API instead of GraphQL
+      # createCommitOnBranch, because FileAddition has no mode field and
+      # vendor executables (mode 100755, e.g. vendor/UditAkhourii-quicksilver/
+      # quicksilver/scripts/qs.mjs, vendor/cloudflare-security-audit-skill/
+      # security-audit/validate-*.cjs) were re-created as 100644, so the
+      # GitHub tree never matched `git write-tree` (ghost commit on every
+      # scheduled run, +x lost at merge). Canary measurement on
+      # qveys/bw-sandbox (temp ref canary-sig-r3, deleted afterwards): a
+      # commit built via blobs -> tree(mode 100755) -> commit -> ref by the
+      # App token has signature.isValid=true, wasSignedByGitHub=true
+      # (Verified). So: blobs -> trees with the exact index modes -> chained
+      # commits, each signature verified via GraphQL BEFORE the sync branch
+      # ref is moved (PATCH -F force=true, or POST when the branch is
+      # absent). On a missing ref (delete_branch_on_merge removes the branch
+      # at merge) `gh api --jq` writes the 404 JSON body to stdout and exits
+      # 1, so the return code is tested explicitly and the value validated as
+      # a 40-hex sha — otherwise branch_sha would hold the 404 JSON and the
+      # PATCH would fail with 422.
       - name: Create Pull Request
         if: steps.check_changes.outputs.changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
           branch="chore/sync-upstream-skills"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          work="$RUNNER_TEMP/sync-commit"
+          mkdir -p "$work"
 
-          # Idempotent like peter-evans/create-pull-request: skip the
-          # commit/force-push if the sync branch already carries this exact
-          # diff, so re-runs with no new upstream changes don't spam pushes.
+          # All JSON is built by python3 (the self-hosted runner may have no
+          # system jq); `gh --jq` (built into the gh binary) reads API answers.
+          command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required on the runner to build the git data API calls." >&2; exit 1; }
+
+          # Base = the CHECKED-OUT commit, used for BOTH the API base
+          # (parents/base_tree of the first tree/commit) and the staged diff
+          # at line ~195: reading the remote branch tip via the API could
+          # return a newer commit than the checkout, and tree entries would
+          # then be applied on a base the diff was not computed against.
+          base_sha=$(git rev-parse HEAD)
+          base_tree=$(git rev-parse 'HEAD^{tree}')
           git add -A
           new_tree=$(git write-tree)
-          old_tree=$(git fetch origin "$branch:refs/remotes/origin/$branch" 2>/dev/null \
-            && git rev-parse "origin/$branch^{tree}" 2>/dev/null || true)
 
-          if [ "$new_tree" = "$old_tree" ]; then
-            echo "No changes since last sync branch push; skipping commit/push."
+          # Idempotent like peter-evans/create-pull-request: skip the commit if
+          # the sync branch already carries this exact tree (modes included,
+          # since trees are built with the index modes below).
+          # The return code is tested explicitly (NOT stdout, which carries the
+          # 404 JSON body on a missing ref) and the value must be a 40-hex sha.
+          branch_sha=""
+          if gh api "repos/$repo/git/ref/heads/$branch" --jq '.object.sha' >"$work/branch_sha.out" 2>/dev/null; then
+            branch_sha=$(cat "$work/branch_sha.out")
+            [[ "$branch_sha" =~ ^[0-9a-f]{40}$ ]] || branch_sha=""
+          fi
+          branch_tree=""
+          if [ -n "$branch_sha" ]; then
+            branch_tree=$(gh api "repos/$repo/git/commits/$branch_sha" --jq '.tree.sha')
+          fi
+          if [ -n "$branch_sha" ] && [ "$new_tree" = "$branch_tree" ]; then
+            echo "No changes since last sync branch commit; skipping commit."
           else
-            git checkout -B "$branch"
-            git commit -m "🔄 chore(sync): update upstream skills"
-            git push -f origin "$branch"
+            cat > "$work/sync_commit.py" <<'PY'
+          import argparse, base64, json, os, re, subprocess, sys, time
+
+          def ratelimit_reset():
+              # cheap GET with -i: headers carry x-ratelimit-remaining/reset
+              p = subprocess.run(["gh", "api", "-i", "repos/%s" % a.repo],
+                                 capture_output=True, text=True)
+              rem = re.search(r"(?im)^x-ratelimit-remaining:\s*(\d+)", p.stdout)
+              rst = re.search(r"(?im)^x-ratelimit-reset:\s*(\d+)", p.stdout)
+              if rem and rst and rem.group(1) == "0":
+                  return int(rst.group(1))
+              return None
+
+          def gh(*args, input_path=None):
+              cmd = ["gh", "api", *args]
+              if input_path:
+                  cmd += ["--input", input_path]
+              for attempt in range(1, 6):
+                  p = subprocess.run(cmd, capture_output=True, text=True)
+                  if p.returncode == 0:
+                      return p.stdout.strip()
+                  err = (p.stderr + " " + p.stdout).lower()
+                  if "rate limit" in err:
+                      reset = ratelimit_reset()
+                      if reset:
+                          wait = reset - time.time() + 5
+                          if 0 < wait <= 5400:  # GitHub job limit is 6 h
+                              print("rate limit atteint: attente jusqu'au reset (+%ds), tentative %d/5" % (int(wait), attempt), file=sys.stderr)
+                              time.sleep(wait)
+                              continue
+                  sys.stderr.write("ERROR: gh api rc=%d: %s\n%s%s\n" % (p.returncode, " ".join(cmd), p.stdout, p.stderr))
+                  sys.exit(1)
+              sys.stderr.write("ERROR: rate limit still active after 5 attempts: %s\n" % " ".join(cmd))
+              sys.exit(1)
+
+          ap = argparse.ArgumentParser()
+          ap.add_argument("--repo", required=True)
+          ap.add_argument("--base-sha", required=True)
+          ap.add_argument("--base-tree", required=True)
+          ap.add_argument("--work", required=True)
+          ap.add_argument("--max-entries", type=int, default=2000)
+          ap.add_argument("--max-blob-bytes", type=int, default=52428800)
+          a = ap.parse_args()
+          repo = a.repo
+          owner, name = repo.split("/", 1)
+
+          # Raw NUL-separated diff from git: ":old_mode new_mode old_sha new_sha STATUS\0path\0"
+          data = sys.stdin.buffer.read().split(b"\0")
+          entries = []
+          i = 0
+          while i + 1 < len(data):
+              meta = data[i].decode().lstrip(":")
+              path = data[i + 1].decode()
+              i += 2
+              if not meta:
+                  continue
+              fields = meta.split()
+              old_mode, new_mode = fields[0], fields[1]
+              new_sha, status = fields[3], fields[-1]
+              if status == "D":
+                  # documented deletion form: mode/type of the removed entry, sha null
+                  entries.append({"path": path, "mode": old_mode, "type": "blob", "sha": None})
+                  continue
+              # Read the STAGED blob by object id (git cat-file), never open() the
+              # worktree path: a staged symlink (mode 120000) must upload the link
+              # text, not its target's bytes (e.g. /proc/self/environ -> GH_TOKEN).
+              raw = subprocess.run(["git", "cat-file", "blob", new_sha],
+                                   capture_output=True, check=True).stdout
+              if len(raw) > a.max_blob_bytes:
+                  sys.stderr.write("ERROR: %s is %d bytes (> --max-blob-bytes %d): refusing the blob POST, fix the file or raise the limit explicitly.\n" % (path, len(raw), a.max_blob_bytes))
+                  sys.exit(1)
+              b64file = os.path.join(a.work, "blob.b64")
+              with open(b64file, "w") as f:
+                  f.write(base64.b64encode(raw).decode())
+              blob_sha = gh("-X", "POST", "repos/%s/git/blobs" % repo,
+                            "-F", "content=@%s" % b64file, "-f", "encoding=base64", "--jq", ".sha")
+              entries.append({"path": path, "mode": new_mode, "type": "blob", "sha": blob_sha})
+
+          if not entries:
+              sys.exit(0)
+
+          head, tree = a.base_sha, a.base_tree
+          n = 0
+          for k in range(0, len(entries), a.max_entries):
+              n += 1
+              label = "chunk-%04d" % n  # zero-padded: chunk-0010 sorts after chunk-0002
+              chunk = entries[k:k + a.max_entries]
+              tree_body = os.path.join(a.work, label + "-tree.json")
+              with open(tree_body, "w") as f:
+                  json.dump({"base_tree": tree, "tree": chunk}, f)
+              tree = gh("-X", "POST", "repos/%s/git/trees" % repo, "--input", tree_body, "--jq", ".sha")
+              commit_body = os.path.join(a.work, label + "-commit.json")
+              with open(commit_body, "w") as f:
+                  json.dump({"message": "🔄 chore(sync): update upstream skills", "tree": tree, "parents": [head]}, f)
+              head = gh("-X", "POST", "repos/%s/git/commits" % repo, "--input", commit_body, "--jq", ".sha")
+              q = ("query { repository(owner: \"%s\", name: \"%s\") { object(oid: \"%s\") "
+                   "{ ... on Commit { signature { isValid wasSignedByGitHub } } } } }" % (owner, name, head))
+              sig = gh("graphql", "-f", "query=%s" % q, "--jq", ".data.repository.object.signature.isValid")
+              print("%s: commit %s signature.isValid=%s (%d entries)" % (label, head, sig, len(chunk)))
+              if sig != "true":
+                  sys.stderr.write("ERROR: commit %s (%s) is NOT signed (isValid=%s); the sync branch ref was NOT moved.\n" % (head, label, sig))
+                  sys.exit(1)
+
+          with open(os.path.join(a.work, "final_head.txt"), "w") as f:
+              f.write(head)
+          print("final head %s (%d entries, %d commit(s))" % (head, len(entries), n))
+          PY
+            # Raw NUL-separated diff (with modes) -> blobs -> trees (modes
+            # preserved) -> chained signed commits. The sync branch ref is
+            # moved only after full success and per-commit signature checks.
+            git diff --cached --raw --no-renames -z HEAD \
+              | python3 "$work/sync_commit.py" \
+                  --repo "$repo" \
+                  --base-sha "$base_sha" --base-tree "$base_tree" \
+                  --work "$work" \
+                  --max-entries "${SYNC_MAX_ENTRIES:-2000}" \
+                  --max-blob-bytes "${SYNC_MAX_BLOB_BYTES:-52428800}"
+            if [ -f "$work/final_head.txt" ]; then
+              head=$(cat "$work/final_head.txt")
+              if [ -n "$branch_sha" ]; then
+                # -F sends a real boolean (force); -f would send the string "true"
+                gh api -X PATCH "repos/$repo/git/refs/heads/$branch" -f sha="$head" -F force=true >/dev/null
+              else
+                gh api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$branch" -f "sha=$head" >/dev/null
+              fi
+            fi
           fi
 
           # REST via `gh api`: `gh pr view/edit/create` query the GraphQL
