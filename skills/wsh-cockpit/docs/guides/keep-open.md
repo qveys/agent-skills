@@ -5,9 +5,16 @@ Une réponse rendue n'est pas une fin de tâche : l'utilisateur relance presque
 toujours sur le même hôte, et rouvrir coûte `spawn` + `--situate` + hop + `remote-init`
 pour rien. Ne `stop` (ni `exit` le hop) que si l'utilisateur dit que c'est fini
 ou le demande explicitement — un changement de sujet ou d'hôte ne ferme rien.
-En fin de réponse,
-signaler simplement « cockpit `<session>` laissé ouvert ». Tour suivant : réutiliser
-la même session (`current`/`status`) avant tout nouveau `spawn`.
+En fin de réponse, signaler simplement « cockpit `<session>` laissé ouvert ».
+
+## Au tour suivant : cibler la session par son nom explicite
+
+`current` et `status` ne voient que les sessions de TA propre clé
+`WSH_COCKPIT_AGENT` (fichier `last-session-*` et registre des claims) : un
+sous-agent avec une autre clé ne retrouvera pas le cockpit laissé ouvert. Tour
+suivant, réutilise donc la session **par son nom explicite**, passé en argument
+(`$L send '<cmd>' <session>`, `$L wait-done <session>`, …) avant tout nouveau
+`spawn`.
 
 ## Session idle
 
