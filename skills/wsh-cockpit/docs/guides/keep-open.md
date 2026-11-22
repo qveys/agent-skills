@@ -19,6 +19,8 @@ suivant, réutilise donc la session **par son nom explicite**, passé en argumen
 ## Session idle
 
 Attends au moins 60s avant de traiter une session idle comme orpheline — elle
-peut être en plein run. `gc` ferme le bloc Wave avec la session tmux ; `stop` aussi, sauf `--keep` :
+peut être en plein run. `gc` (lancé par `spawn`) balaie toute session détachée inactive ≥ 24 h
+(`WSH_LIVE_GC_IDLE`) : le plancher keep n'en protège pas plus — « ouvert » vaut jusque-là.
+`gc` ferme le bloc Wave avec la session tmux ; `stop` aussi, sauf `--keep` :
 il la libère (`release`), tmux et bloc restent.
 
