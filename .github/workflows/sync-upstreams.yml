@@ -88,8 +88,13 @@ jobs:
           # system jq); `gh --jq` (built into the gh binary) reads API answers.
           command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required on the runner to build the git data API calls." >&2; exit 1; }
 
-          master_sha=$(gh api "repos/$repo/git/ref/heads/$GITHUB_REF_NAME" --jq '.object.sha')
-          master_tree=$(gh api "repos/$repo/git/commits/$master_sha" --jq '.tree.sha')
+          # Base = the CHECKED-OUT commit, used for BOTH the API base
+          # (parents/base_tree of the first tree/commit) and the staged diff
+          # at line ~195: reading the remote branch tip via the API could
+          # return a newer commit than the checkout, and tree entries would
+          # then be applied on a base the diff was not computed against.
+          base_sha=$(git rev-parse HEAD)
+          base_tree=$(git rev-parse 'HEAD^{tree}')
           git add -A
           new_tree=$(git write-tree)
 
@@ -192,10 +197,10 @@ jobs:
             # Raw NUL-separated diff (with modes) -> blobs -> trees (modes
             # preserved) -> chained signed commits. The sync branch ref is
             # moved only after full success and per-commit signature checks.
-            git diff --cached --raw --no-renames -z "$GITHUB_REF_NAME" \
+            git diff --cached --raw --no-renames -z HEAD \
               | python3 "$work/sync_commit.py" \
                   --repo "$repo" \
-                  --base-sha "$master_sha" --base-tree "$master_tree" \
+                  --base-sha "$base_sha" --base-tree "$base_tree" \
                   --work "$work" \
                   --max-entries "${SYNC_MAX_ENTRIES:-2000}" \
                   --max-blob-bytes "${SYNC_MAX_BLOB_BYTES:-52428800}"
