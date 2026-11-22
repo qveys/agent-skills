@@ -150,11 +150,17 @@ jobs:
               if not meta:
                   continue
               fields = meta.split()
-              new_mode, status = fields[1], fields[-1]
+              old_mode, new_mode = fields[0], fields[1]
+              new_sha, status = fields[3], fields[-1]
               if status == "D":
-                  entries.append({"path": path, "sha": None})
+                  # documented deletion form: mode/type of the removed entry, sha null
+                  entries.append({"path": path, "mode": old_mode, "type": "blob", "sha": None})
                   continue
-              raw = open(path, "rb").read()
+              # Read the STAGED blob by object id (git cat-file), never open() the
+              # worktree path: a staged symlink (mode 120000) must upload the link
+              # text, not its target's bytes (e.g. /proc/self/environ -> GH_TOKEN).
+              raw = subprocess.run(["git", "cat-file", "blob", new_sha],
+                                   capture_output=True, check=True).stdout
               if len(raw) > a.max_blob_bytes:
                   sys.stderr.write("ERROR: %s is %d bytes (> --max-blob-bytes %d): refusing the blob POST, fix the file or raise the limit explicitly.\n" % (path, len(raw), a.max_blob_bytes))
                   sys.exit(1)
