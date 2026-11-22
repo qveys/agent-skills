@@ -1,53 +1,48 @@
 # Gotchas
 
-Pièges opérationnels en mode `live` et `rexec` — ce qui change ce qu'un agent doit
-taper. Voir `SKILL.md` pour les règles impératives. Pour le détail archéologique et
-le "pourquoi" des gardes (mesures tmux, régressions, historique) : `docs/internals.md`.
+Pièges opérationnels en mode `live`/`rexec` — ce qui change ce qu'un agent doit
+taper. Règles impératives : `SKILL.md`. Détail archéologique et « pourquoi » des
+gardes (mesures tmux, régressions, historique) : `docs/internals.md`.
 
 ## Un nom de session est littéral, jamais un préfixe
 
-Un nom de session doit être exact — `mux_has`/`mux_kill`/`mux_clients`
-anchorent leur cible tmux (`-t "=$1"`), donc un préfixe qui matchait avant
-par accident ne matche plus rien. Détail et mesures : `docs/internals.md` →
-"Anchoring `=` et résolution par préfixe des noms de session".
+Un nom de session doit être exact — `mux_has`/`mux_kill`/`mux_clients` anchorent
+leur cible tmux (`-t "=$1"`), donc un préfixe qui matchait avant par accident ne
+matche plus rien.
 
 ## `stop`/`gc` refusent ta propre session
 
-`stop <session>` sur ta propre session tape exit 8 (refus net, pas de
-"continuer sur le reste") ; `gc` la saute pendant le sweep (comptée `kept`)
-plutôt que de la détruire. Détail : `docs/internals.md` → "Garde own-session
-sur `gc` et `stop` (implémentation)".
+`stop <session>` sur ta propre session tape exit 8 (refus net, pas de « continuer
+sur le reste ») ; `gc` la saute pendant le sweep (comptée `kept`) plutôt que de la
+détruire.
 
 ## Ne jamais lancer `selftest-guard` depuis une session qui compte
 
 Il opère directement sur le serveur tmux par défaut (pas un socket isolé) et
 groupe temporairement des sessions pendant certains cases — y compris
-potentiellement la tienne. Détail : `docs/internals.md` → "`selftest-guard`
-opère sur le serveur tmux par défaut".
+potentiellement la tienne.
 
 ## Une session laissée en plein ssh n'est pas réutilisable par un `spawn` ordinaire
 
-Une fois hoppée, le foreground du pane n'est plus un shell nu, donc `spawn` ouvre une
-nouvelle cockpit (nouvelle auth, second bloc Wave) sauf si la session est listée dans
+Une fois hoppée, le foreground du pane n'est plus un shell nu : `spawn` ouvre une
+nouvelle cockpit (nouvelle auth, second bloc Wave) sauf si la session est dans
 `WSH_COCKPIT_ADOPT`. Workaround : réutiliser la session explicitement (`SESSION=…`).
-Détail : `docs/internals.md`.
 
 ## `docker exec` est une couche de plus que les helpers poussés n'atteignent pas
 
-Symptôme : `No such file or directory` sur le fichier helper juste après le hop
-conteneur, footer `exit` disparu. Fix : `remote-init --container <container>
-[session]` — copie les mêmes fichiers au même chemin absolu, la forme courte de
-`send`/`banner` repart sans changement. **Pas de repli inline** (workflow réel,
-rejeté explicite — voir `docs/framing-and-transfer.md` → "Descendre d'une couche
-de plus"). Best-effort : conteneur injoignable → warning stderr, retour non nul,
-jamais de hard fail. Couvert par `selftest-live` cases 14a-14c. Mécanisme et
-mesures : `docs/internals.md`.
+Symptôme : `No such file or directory` sur le helper juste après le hop conteneur,
+footer `exit` disparu. Fix : `remote-init --container <container> [session]` —
+copie les mêmes fichiers au même chemin absolu, la forme courte de `send`/`banner`
+repart sans changement. **Pas de repli inline** (rejeté explicite — voir
+`docs/framing-and-transfer.md` → « Descendre d'une couche de plus »). Best-effort :
+conteneur injoignable → warning stderr, retour non nul, jamais de hard fail.
+Couvert par `selftest-live` cases 14a-14c.
 
 ## `remote-init "$sess"` sans hôte purge maintenant les chemins helpers périmés
 
 La branche sans hôte appelle le même `remote_helper_paths_clear` que `local-init`
-avant de poser le flag sticky — plus de chemin helper remote périmé qui traîne.
-Couvert par `selftest-live` case 13. Historique du bug : `docs/internals.md`.
+avant de poser le flag sticky — plus de chemin helper remote périmé. Couvert par
+`selftest-live` case 13.
 
 ## Never start cockpit blindly
 
@@ -57,11 +52,10 @@ duplicate window.
 
 ## Never call spawn again mid-workflow to reconnect
 
-If the cockpit tab is still open, run `send`/`read` (or `current` / `status`)
-against the existing `SESSION=`. `spawn` without `--force` reuses an alive session,
-but a prefix matching nothing in the registry, `WSH_COCKPIT_ADOPT` or the legacy
-scan **creates a fresh cockpit** — a second tab, exactly like `--force`. Pourquoi :
-`docs/internals.md`.
+If the tab is still open, run `send`/`read` (or `current`/`status`) against the
+existing `SESSION=`. `spawn` without `--force` reuses an alive session, but a prefix
+matching nothing in the registry, `WSH_COCKPIT_ADOPT` or the legacy scan **creates a
+fresh cockpit** — a second tab, exactly like `--force`.
 
 ## Never skip airy step banners on multi-step cockpit work
 
@@ -121,18 +115,16 @@ next `send` until the restart's footer shows exit 0 *and* the probe is ok. Prefe
 $COCKPIT send 'bash ~/wsh-gw-restart.sh 60 2>&1' "$SESS"
 ```
 
-`openclaw gateway restart --wait 45s` couvre le même cas. Boucle inline complète :
-`docs/internals.md`.
+`openclaw gateway restart --wait 45s` couvre le même cas.
 
 ## `sudo` ne reçoit pas le TTY à travers le framing de `send`
 
-Symptôme (mesuré 2026-09-16 sur vps-openclaw, via le hop distant) : `send 'sudo
-<cmd> 2>&1'` affiche `[sudo] password for <user>:` puis échoue **immédiatement**
-(`sudo: a password is required`, footer `exit 1`) — le process a lu EOF et le `keys`
-d'appoint arrive après sa mort. `docs/framing-and-transfer.md` décrit l'inverse (un
-`sudo` interactif alimentable par `keys`) : les deux ne peuvent pas être vrais
-partout, donc traite le cas mesuré comme le tien dès que le pane n'est pas le TTY
-qui exécute.
+Symptôme (mesuré 2026-09-16, vps-openclaw, hop distant) : `send 'sudo <cmd> 2>&1'`
+affiche `[sudo] password for <user>:` puis échoue **immédiatement** (`sudo: a
+password is required`, footer `exit 1`) — le process a lu EOF, le `keys` arrive
+après sa mort. `docs/framing-and-transfer.md` décrit l'inverse (un `sudo` interactif
+alimenté par `keys`) : les deux ne peuvent être vrais partout, donc traite le cas
+mesuré comme le tien dès que le pane n'est pas le TTY qui exécute.
 
 Deux voies propres, jamais de saisie du mot de passe par l'agent :
 
@@ -143,18 +135,18 @@ WSH_LIVE_SEP=0 scripts/wsh-live.sh send 'sudo <cmd>' "$SESS"
 # ou la faire taper par l'utilisateur dans le pane
 ```
 
-Corollaire, **dans ce cas mesuré seulement** : ne pas `wait-done` sur un `sudo` cadré
-en croyant qu'il attend une saisie — il a déjà rendu la main ; vérifier avec `read`.
-Sous le contrat de framing (un `sudo` interactif alimenté par `keys`), `wait-done`
-reste au contraire la bonne attente, puisqu'il ne rend pas la main avant la fin. Pane
-dans un shell root (`su`) : **deux** `exit`, un pour root, un pour ssh.
+Corollaire, **cas mesuré seulement** : ne pas `wait-done` sur un `sudo` cadré en
+croyant qu'il attend une saisie — il a déjà rendu la main ; vérifier avec `read`.
+Sous le contrat de framing (`sudo` interactif alimenté par `keys`), `wait-done`
+reste la bonne attente (ne rend pas la main avant la fin). Pane en shell root
+(`su`) : **deux** `exit`, un pour root, un pour ssh.
 
 ## Toujours terminer la commande `send`/`rexec` par `2>&1`
 
 Non négociable. L'utilisateur **EXIGE de voir le footer `└─[#N] exit <code>`** :
 sans `2>&1`, la sortie stderr peut arriver **après** le footer et donner
 l'impression qu'il manque. `2>&1` fusionne les deux flux **avant** l'impression du
-footer, qui reste donc la dernière ligne. Pourquoi, en détail : `docs/internals.md`.
+footer, qui reste la dernière ligne.
 ```bash
 $COCKPIT send 'openclaw doctor 2>&1' "$SESS"   # BIEN
 $COCKPIT send 'openclaw doctor' "$SESS"        # MAL
@@ -179,9 +171,9 @@ $COCKPIT send 'openclaw infer model run ... 2>&1' cockpit-theo-plan-225108
 $COCKPIT wait-done cockpit-theo-plan-225108 180
 ```
 Timeout par défaut 300 s (`WSH_WAIT_TIMEOUT`). `--print` émet le résultat dans le
-même appel (borné par les marqueurs `┌─[#N]`/`└─[#N]`) au lieu d'un `read`/
-`output` séparé — voir `docs/framing-and-transfer.md` → "Lire un résultat sans
-deviner". Mécanique (`@[wsh_seq]`, polling du pane) : `docs/internals.md`.
+même appel (borné par les marqueurs `┌─[#N]`/`└─[#N]`) au lieu d'un `read`/`output`
+séparé — voir `docs/framing-and-transfer.md` → « Lire un résultat sans deviner ».
+Mécanique : `@[wsh_seq]` + polling du pane.
 
 ## Texte tapé dans un TUI sans Entrée effectif
 
@@ -196,3 +188,13 @@ Un texte d'environ 1 600 caractères envoyé par `tmux send-keys` dans un TUI
 Claude Code est arrivé tronqué (début perdu), pause de 2 s comprise. Au-delà de
 ~500 caractères, passer par un fichier et envoyer une phrase courte qui y
 renvoie. Mesures : `docs/tui-driving.md`.
+
+## `wsh` introuvable alors que l'agent est dans Wave (tmux)
+
+`open`/`spawn` affiche « wsh not found — can't auto-open a Wave block », ou `wsh`
+répond « WAVETERM_JWT not found ». Causes : `wsh` vit dans
+`~/Library/Application Support/waveterm/bin` (hors PATH) et tmux ne transmet pas
+`WAVETERM_*` (`env | grep WAVETERM` vide) alors qu'ils sont dans
+`tmux show-environment`. Remède : `wsh_env_fallback` (scripts/lib/wave.sh) ajoute
+le dossier au PATH et importe les `WAVETERM_*` de tmux, sans les afficher ; à la
+main, même chose avant `wsh`. Ne jamais afficher ni logguer le JWT.
