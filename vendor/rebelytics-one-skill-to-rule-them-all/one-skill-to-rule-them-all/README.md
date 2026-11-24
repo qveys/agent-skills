@@ -6,7 +6,7 @@
 
 This meta-skill has **logged over 2,500 observations across my 87 skills**, most of which were turned into skill improvements. The majority of my 87 skills were themselves created based on observations by the meta-skill.
 
-The current version of task-observer also includes improvements from over 100 contributors, each credited as an author or co-author in the commit history, and over 360 issues and pull requests have been closed. Without these contributions, the project wouldn't be half as good as it is today.
+The current version of task-observer also includes improvements from over 100 contributors, each credited as an author or co-author in the commit history, and over 390 issues and pull requests have been closed. Without these contributions, the project wouldn't be half as good as it is today.
 
 **Want to support the project? It's not about money — read [how you can help](SUPPORT.md).**
 
@@ -15,7 +15,7 @@ This meta-skill is a practical application of the [Augmented Expertise](https://
 ## Quick install
 
 1. **Install it, by either route:**
-   - **From a terminal (Vercel's skills CLI, needs Node.js):** `npx skills@1.8.1 add rebelytics/one-skill-to-rule-them-all --skill task-observer` — add `-g` to install it for all your projects. This is the most-used route: the skills.sh listing reports over 19,000 installs.
+   - **From a terminal (Vercel's skills CLI, needs Node.js):** `npx skills@1.8.1 add rebelytics/one-skill-to-rule-them-all --skill task-observer` — add `-g` to install it for all your projects. This is the most-used route: the skills.sh listing reports over 20,000 installs.
    - **In the Claude apps (web, desktop, mobile, Cowork):** upload the `.skill` bundle from the latest release via Settings → Customize.
 2. **Activate it, whichever route you used.** In Claude Code, start with the session-start hook in `references/environments.md` ("A session-start hook"): it injects the activation into every session, and it is the only layer the harness enforces. Then, in Claude Code as everywhere else, paste the activation block from the same file into your CLAUDE.md (or your platform's equivalent): 31 lines, plus up to five optional configuration lines beside it. Check that it runs (see "Check that it actually runs" below). Installing alone is not enough, because description matching under-triggers.
 
@@ -265,6 +265,7 @@ I would like to thank the following creators, platforms, publications, companies
 - 飞熊 (East196): [https://east196.cn/index.php/2026/10/29/task-observer-调研-3-6k-星的-万技能之母-一个观察-84-个技能的自进/](https://east196.cn/index.php/2026/10/29/task-observer-%e8%b0%83%e7%a0%94-3-6k-%e6%98%9f%e7%9a%84-%e4%b8%87%e6%8a%80%e8%83%bd%e4%b9%8b%e6%af%8d-%e4%b8%80%e4%b8%aa%e8%a7%82%e5%af%9f-84-%e4%b8%aa%e6%8a%80%e8%83%bd%e7%9a%84%e8%87%aa%e8%bf%9b/)
 - AI Parabellum: [https://aiparabellum.com/tools-that-write-claude-code-skills-compared/](https://aiparabellum.com/tools-that-write-claude-code-skills-compared/)
 - Philo (AI Post Hub): [https://aiposthub.com/claude-skills-five-check-before-install-claude-mem-skills-sh-audit/](https://aiposthub.com/claude-skills-five-check-before-install-claude-mem-skills-sh-audit/)
+- João Guirunas: [https://joaoguirunas.com/open-source/skills/5-plugins-claude-code-tokens](https://joaoguirunas.com/open-source/skills/5-plugins-claude-code-tokens)
 
 If I forgot to list your recommendation here, please let me know or submit it via a PR in the same format as the others.
 

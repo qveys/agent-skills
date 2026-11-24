@@ -75,8 +75,8 @@ sources:
     ref: main
     path: .
     destination: vendor/rebelytics-one-skill-to-rule-them-all/one-skill-to-rule-them-all
-    commit: 4d7bcd7f042f1cf2bef1ebf2aabdeefae8d740ae
-    syncedAt: 2026-11-22T02:15:36.600Z
+    commit: 6325c8e477608942da2f98b7f3a0d625c722ee22
+    syncedAt: 2026-11-24T02:14:57.856Z
   quicksilver:
     repo: UditAkhourii/quicksilver
     ref: main
