@@ -1,7 +1,7 @@
 ---
 name: native-lib-load-recovery
 description: "Use when a prebuilt .so or native addon fails to load."
-version: 1.0.0
+version: 1.0.1
 author: Hermes Agent
 license: MIT
 platforms: [linux]
@@ -67,4 +67,4 @@ Un code de sortie 0 ne prouve rien si le message d'erreur figure encore dans la 
 
 ## Cas connu
 
-Dans le conteneur agent, `qmd` : shim `/workspace/.qmd/libshim/libc.so` et lancement avec `LD_LIBRARY_PATH=/workspace/.qmd/libshim` et `QMD_FORCE_CPU=1`. Vérifier avec `qmd doctor` (attendre la ligne `✓ sqlite-vec` et un mode device résolu).
+Dans le conteneur agent, `qmd` (installation unique `/opt/data/qmd`, wrapper `/opt/data/qmd/bin/qmd-cpu`, qui force `QMD_FORCE_CPU=1`) se charge sans shim avec l'image Hermes v0.23 (vérifié le 2026-11-26). Si l'erreur `DT_NEEDED: libc.so` réapparaît : shim `/opt/data/qmd/libshim/libc.so -> /lib/x86_64-linux-gnu/libc.so.6` et lancement avec `LD_LIBRARY_PATH=/opt/data/qmd/libshim`. Vérifier avec `/opt/data/qmd/bin/qmd-cpu doctor` (attendre la ligne `✓ sqlite-vec` et un mode device résolu). L'ancienne installation `/workspace/.qmd` a été supprimée le 2026-11-26.
