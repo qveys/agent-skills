@@ -1,7 +1,7 @@
 ---
 name: readonly-audit
 description: "Use when « ne modifie rien » : audit en lecture seule."
-version: 1.1.0
+version: 1.1.1
 author: Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
@@ -43,8 +43,8 @@ Charger ceci quand la demande est de **vérifier sans rien modifier** (« Ne mod
 ## Points d'ancrage (cette instance : déploiement Hermes + projet brain ; chemins vérifiés présents, à adapter ailleurs)
 
 - CLI `hermes` hors PATH des shells d'outils (install docker) : `/opt/hermes/libexec/hermes` ou `/opt/hermes/bin/hermes` (`--version` pour confirmer).
-- `qmd` hors PATH : `/workspace/.qmd/npm/bin/qmd`. Index : `/workspace/.qmd/cache/qmd/index.sqlite`, collection `second-cerveau`. `qmd status` = état de l'index ; `qmd search "<query>" -c second-cerveau` = BM25 sans LLM, test rapide.
-- **Invoquer qmd sans ses wrappers** : `bin/qmd` et `bin/qmd-cpu` codent `/workspace` en dur (`XDG_CACHE_HOME`, `QMD_CONFIG_DIR`, `QMD_REAL`), racine absente du conteneur → `not found`. Appeler le binaire réel avec les chemins résolus : `XDG_CACHE_HOME=/workspace/.qmd/cache QMD_CONFIG_DIR=/workspace/.qmd/config LD_LIBRARY_PATH=/workspace/.qmd/libshim QMD_FORCE_CPU=1 /workspace/.qmd/npm/bin/qmd --help`. Le shim `libshim/libc.so` reste requis (les `.so` préconstruits déclarent `DT_NEEDED libc.so`).
+- `qmd` hors PATH : wrapper `/opt/data/qmd/bin/qmd-cpu` (charge `/opt/data/qmd/env.sh`, config `/opt/data/qmd/vault-config`, index `/opt/data/qmd/vault.sqlite`, collections `vault`, `meta`, `archives`). `qmd-cpu status` = état de l'index ; `qmd-cpu search "<query>" -c vault` = BM25 sans LLM, test rapide. Rafraîchissement : `/opt/data/qmd/refresh.sh` (`update` puis `embed --timeout 0`).
+- **Invoquer qmd sans le wrapper** : `qmd` seul prend la configuration par défaut de `$HOME` (index et collections différents, chemins périmés). Toujours passer par `qmd-cpu`. L'ancienne installation `/workspace/.qmd` a été supprimée le 2026-11-26.
 - Kanban : racine partagée `<KANBAN_ROOT>` (`$HERMES_KANBAN_HOME`, sinon `/opt/data` — pas le home d'un profil) ; board courant dans `<KANBAN_ROOT>/kanban/current` ; stockage par board `<KANBAN_ROOT>/kanban/boards/<slug>/` (board `default` : `<KANBAN_ROOT>/kanban.db`) ; `hermes kanban --board <slug> …` opère ailleurs **sans** changer le courant ; `boards switch` écrit — interdit en audit.
 - Dépôts : `/workspace/brain` (remote Gitea `brain.git`) et son vault `/workspace/brain/Second-Cerveau` (dépôt **séparé**, remote `second-cerveau.git`). Carte complète des montages et de la propriété des dossiers : `references/deployment-layout.md`. Nature d'un dossier : `<dir>/.git` **dossier** = dépôt autonome ; `.git` **fichier** (`gitdir: …`) = sous-module ou worktree. Preuve d'exclusion : `git check-ignore -v <chemin>` (exit 0 + la règle). Un worktree ne matérialise que les fichiers suivis : un dossier ignoré est absent des worktrees — le vérifier par glob (`wt/*/<chemin>`), jamais par supposition.
 - Propreté ≠ alignement : `git status --porcelain | wc -l` prouve l'absence de changements locaux, mais l'alignement se prouve **sans réseau** par `git rev-list --left-right --count <branche>...origin/<branche>` (`0 0` = aligné, sur les refs connues). Pour savoir quel commit a absorbé un lot trouvé sale au contrôle précédent : `git log -2 --format='%h %cI %s'` et `git reflog --date=iso`.

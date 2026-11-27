@@ -63,8 +63,8 @@ Confirmer avant suppression.
 
 | Bloc | Taille | Régénérable ? |
 |---|---|---|
-| `workspace/.qmd/cache/qmd/models/*.gguf` | ~2,2 Go | **non** — poids ML téléchargés |
-| `workspace/.qmd/cache/qmd/index.sqlite` | ~48 Mo | oui, recréé à la première invocation |
+| `qmd/cache/qmd/models/*.gguf` | ~0,3 Go | **non** — poids ML téléchargés |
+| `qmd/vault.sqlite` | ~0,2 Go | oui, `/opt/data/qmd/refresh.sh` (embed CPU long) |
 | `profiles/*/checkpoints/store/objects` | ~1,9 Go pour 3 profils | non — snapshots de session |
 | `home/.cache/uv`, `home/.npm` | ~950 Mo | oui, si périmés (vérifier la date de dernier accès) |
 | `00_INBOX/<export brut>` | jusqu'à 5 Go | non — donnée utilisateur, non indexée, non versionnée |
